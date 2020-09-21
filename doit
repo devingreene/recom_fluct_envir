@@ -1,0 +1,8 @@
+#!/bin/bash
+
+if [ "$1" = --dump ]
+then  
+    ./parserun.py < input_file.txt
+else
+    ./parserun.py < input_file.txt | ./parse_results_plot.py
+fi

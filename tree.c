@@ -22,15 +22,29 @@ typedef struct _bitstr
 
 /* Globals set by cmdline arguments */
 int nloci;
-int nindiv;
 double discount;
 double shift_rate;
 double mutation_rate;
 
+int nindiv;
 int nwords;
 int residual;
 int env;
 
+/* Global for location of sexuals */
+int found_sex = -1;
+
+/* High water marks */
+#ifdef DIAG
+size_t hwm_cache = 0;
+int hwm_mutation_sites_space = 8;
+int hwm_power_table_len;
+#endif
+
+/* Forward declarations */
+void mutate(bitstr bs);
+
+/* Bitstring operations */
 uint32 weight(uint64 *bits)
 {
     int i,res = 0;
@@ -69,6 +83,7 @@ void xor_me(uint64 *p, uint64 *q)
         p[i] ^= q[i];
 }
 
+/* Single data structure */
 struct node
 {
     bitstr bs;
@@ -79,77 +94,14 @@ struct node
     struct node *next;
 };
 
-struct tree
+int check_sex_bit(bitstr bs)
 {
-    struct node *root;
-#if defined(STEPWISE) || defined(DIAG)
-    size_t size;
-#endif
-};
-
-struct tree thetree = {NULL
-#if defined(STEPWISE) || defined(DIAG)
-    ,0};
-#else
-};
-#endif
-
-struct arrays
-{
-    bitstr *bs;
-    double *w;
-    int len;
-    int space;
-};
-
-struct arrays thearray;
-
-void initialize_array(void)
-{
-    thearray.bs = malloc(sizeof(*thearray.bs)*0x1000);
-    /* Bit strings in one call to malloc */
-    uint64 *allbits = malloc(sizeof(uint64)*nwords*0x1000);
-
-    int i;
-    for(i=0;i<0x1000;i++,allbits += nwords)
-        thearray.bs[i].bits = allbits;
-    thearray.w    = malloc(sizeof(double)*0x1000);
-    thearray.len  = 0;
-    thearray.space = 0x1000;
+    return !!(bs.bits[nwords-1] & (1UL << residual));
 }
 
-void increase_array_space(void)
+void set_sex_bit(bitstr bs)
 {
-    thearray.bs = realloc(thearray.bs,sizeof(*thearray.bs)*thearray.space*2);
-    thearray.w = realloc(thearray.w,sizeof(double)*thearray.space*2);
-
-    uint64 *allbits = malloc(sizeof(uint64)*nwords*thearray.space);
-    int i;
-    for(i=thearray.space;i<2*thearray.space;i++,allbits += nwords)
-        thearray.bs[i].bits = allbits;
-
-    thearray.space *= 2;
-}
-
-/* Global for location of sexuals */
-int found_sex = -1;
-
-void append_array(struct node* n)
-{
-
-    if(thearray.len > (7*thearray.space)/8)
-        increase_array_space();
-
-    memcpy(thearray.bs[thearray.len].bits,n->bs.bits,sizeof(uint64)*nwords);
-    /* XXX */
-    /* Necessary? */
-    thearray.bs[thearray.len].weight = n->bs.weight;
-    thearray.w[thearray.len] = pow(discount,abs(n->bs.weight - env))*n->n;
-    if(found_sex < 0) 
-        /* Two-fold advantage */
-        thearray.w[thearray.len] *= 2;
-    thearray.len++;
-    assert(thearray.len <= nindiv);
+    bs.bits[nwords-1] |= (1UL << residual);
 }
 
 struct nodecache
@@ -158,17 +110,24 @@ struct nodecache
 #if defined(STEPWISE) || defined(DIAG)
     size_t size;
 #endif
-};
-
-struct nodecache ncache = {NULL
+} ncache = {NULL
 #if defined(STEPWISE) || defined(DIAG)
     ,0} ;
 #else
     };
 #endif
 
+struct tree
+{
+    struct node *root;
 #if defined(STEPWISE) || defined(DIAG)
-size_t hwm_cache = 0;
+    size_t size;
+#endif
+} thetree = {NULL
+#if defined(STEPWISE) || defined(DIAG)
+    ,0};
+#else
+};
 #endif
 
 void putnode(struct node *n)
@@ -177,10 +136,13 @@ void putnode(struct node *n)
     ncache.head = n;
 #if defined(STEPWISE) || defined(DIAG)
     ncache.size++;
+#ifdef DIAG
     hwm_cache = (hwm_cache < ncache.size)?ncache.size:hwm_cache;
+#endif
 #endif
 }
 
+/* Node and tree methods */
 struct node *getnode(bitstr bs)
 {
     struct node *n;
@@ -232,7 +194,7 @@ void insert(bitstr bs)
 #endif
 }
 
-#if defined(STEPWISE) || defined(DIAG)
+#ifdef STEPWISE
 void remove_node(struct node **prev, struct node *child)
 {
     struct node *n;
@@ -278,9 +240,88 @@ void delete(bitstr bs)
 }
 #endif
 
-/* Forward declarations */
-int check_sex_bit(bitstr bs);
-void set_sex_bit(bitstr bs);
+#if defined(STEPWISE) || defined(DIAG)
+/* Printing methods */
+void printbf(struct node *node)
+{
+    int i;
+    uint64 *bits = node->bs.bits;
+    int n = node->n;
+    int weight = node->bs.weight;
+    for(i = 0 ; i < nwords ; i++)
+        printf("%016lx",bits[i]);
+    printf(": %05d %05d\n",n,weight);
+}
+
+void partialdump(struct node *n)
+{
+    if(n)
+    {
+        partialdump(n->left);
+        printbf(n);
+        partialdump(n->right);
+    }
+}
+
+void dumptree(void)
+{
+    partialdump(thetree.root);
+}
+#endif
+
+struct arrays
+{
+    bitstr *bs;
+    double *w;
+    int len;
+    int space;
+} thearray;
+
+/* Array methods */
+void initialize_array(void)
+{
+    thearray.bs = malloc(sizeof(*thearray.bs)*0x1000);
+    /* Bit strings in one call to malloc */
+    uint64 *allbits = malloc(sizeof(uint64)*nwords*0x1000);
+
+    int i;
+    for(i=0;i<0x1000;i++,allbits += nwords)
+        thearray.bs[i].bits = allbits;
+    thearray.w    = malloc(sizeof(double)*0x1000);
+    thearray.len  = 0;
+    thearray.space = 0x1000;
+}
+
+void increase_array_space(void)
+{
+    thearray.bs = realloc(thearray.bs,sizeof(*thearray.bs)*thearray.space*2);
+    thearray.w = realloc(thearray.w,sizeof(double)*thearray.space*2);
+
+    uint64 *allbits = malloc(sizeof(uint64)*nwords*thearray.space);
+    int i;
+    for(i=thearray.space;i<2*thearray.space;i++,allbits += nwords)
+        thearray.bs[i].bits = allbits;
+
+    thearray.space *= 2;
+}
+
+void append_array(struct node* n)
+{
+
+    if(thearray.len > (7*thearray.space)/8)
+        increase_array_space();
+
+    memcpy(thearray.bs[thearray.len].bits,n->bs.bits,sizeof(uint64)*nwords);
+    /* XXX */
+    /* Necessary? */
+    thearray.bs[thearray.len].weight = n->bs.weight;
+    thearray.w[thearray.len] = pow(discount,abs(n->bs.weight - env))*n->n;
+    if(found_sex < 0) 
+        /* Two-fold advantage */
+        thearray.w[thearray.len] *= 2;
+    thearray.len++;
+    assert(thearray.len <= nindiv);
+}
 
 /* Globals */
 uint32 *no_sex_weights;
@@ -321,34 +362,6 @@ void linearize_and_tally_weights(void)
     assert(!thetree.root);
 }
 
-#if defined(STEPWISE) || defined(DIAG)
-void printbf(struct node *node)
-{
-    int i;
-    uint64 *bits = node->bs.bits;
-    int n = node->n;
-    int weight = node->bs.weight;
-    for(i = 0 ; i < nwords ; i++)
-        printf("%016lx",bits[i]);
-    printf(": %05d %05d\n",n,weight);
-}
-
-void partialdump(struct node *n)
-{
-    if(n)
-    {
-        partialdump(n->left);
-        printbf(n);
-        partialdump(n->right);
-    }
-}
-
-void dumptree(void)
-{
-    partialdump(thetree.root);
-}
-#endif
-
 gsl_rng *rng;
 
 void initialize_rng(void)
@@ -359,8 +372,6 @@ void initialize_rng(void)
     gsl_rng_set(rng,seed);
 }
 
-/* Forward declaration */
-void mutate(bitstr bs);
 void make_children(uint64 *scratch1)
 {
     int i,j;
@@ -402,16 +413,6 @@ void make_children(uint64 *scratch1)
     }
 }
 
-int check_sex_bit(bitstr bs)
-{
-    return !!(bs.bits[nwords-1] & (1UL << residual));
-}
-
-void set_sex_bit(bitstr bs)
-{
-    bs.bits[nwords-1] |= (1UL << residual);
-}
-
 void shift_env(void)
 {
     double x = gsl_rng_uniform(rng);
@@ -422,22 +423,19 @@ void shift_env(void)
     env = (env < 0)?0:(env > nloci)?nloci:env;
 }
 
-/* Global */
+/* Mutation data structures */
 struct _mutation_sites
 {
     int *where;
     int len;
     int space;
 } mutation_sites;
+
 struct _power_table
 {
     double *table;
     int len;
 } power_table;
-#ifdef DIAG
-int hwm_mutation_sites_space = 8;
-int hwm_power_table_len;
-#endif
 
 void initialize_power_table(void)
 {

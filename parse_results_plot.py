@@ -36,7 +36,7 @@ nloci = a_arr.shape[1] - 1
 a_arr_old = a_arr
 s_arr_old = s_arr
 nbins = nloci + 1
-if nloci > 10:
+if nloci > 9:
     nbins = 10
     lendpts = np.linspace(0,nloci+1,nbins+1)
     bins = []

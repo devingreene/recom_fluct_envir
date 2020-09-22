@@ -31,6 +31,35 @@ for line in sys.stdin:
     col = tally_pattern("sex").parseString(line,parseAll=True).asList()
     s_arr = np.vstack((s_arr,col))
 
+# Binning
+nloci = a_arr.shape[1] - 1
+a_arr_old = a_arr
+s_arr_old = s_arr
+nbins = nloci
+if nloci > 10:
+    nbins = 10
+    lendpts = np.linspace(0,nloci+1,nbins+1)
+    bins = []
+    i = 0
+    for j,x in enumerate(lendpts):
+        while i < x:
+            i += 1
+        bins += [i]
+    a_arr_old = a_arr
+    s_arr_old = s_arr
+    a_arr = np.empty((len(a_arr),len(bins)-1))
+    s_arr = np.empty((len(s_arr),len(bins)-1))
+    for i in range(len(bins)-1):
+        a_arr[:,i] = a_arr_old[:,bins[i]:bins[i+1]].sum(1)
+        s_arr[:,i] = s_arr_old[:,bins[i]:bins[i+1]].sum(1)
+
+    
+    labels = ["{:d}-{:d}a".format(bins[i],bins[i+1]-1) if bins[i] != bins[i+1]-1 else "{:d}a".format(bins[i]) for i in range(a_arr.shape[1])] + \
+            ["{:d}-{:d}s".format(bins[i],bins[i+1]-1) if bins[i] != bins[i+1]-1 else "{:d}s".format(bins[i]) for i in range(s_arr.shape[1])] 
+else:
+    labels = ["{:2d}a".format(i) for i in range(a_arr.shape[1])] + \
+            ["{:2d}s".format(i) for i in range(s_arr.shape[1])]
+
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
@@ -38,26 +67,26 @@ size = (a_arr[0] + s_arr[0]).sum()
 
 plt.rcParams.update({'font.family':'serif',
                      'font.sans-serif':'Palatino',
-                     'text.usetex':True})
+                     'text.usetex':True,
+                     'axes.prop_cycle':plt.rcParams['axes.prop_cycle'][:nbins]})
 
-plt.figure(figsize=(10,5))
-ax1 = plt.gca()
+plt.figure(figsize=(10,5),tight_layout=True)
+ax1 = plt.subplot(1,6,(1,5))
+ax2 = plt.subplot(1,6,6,frame_on=False,xticks=[],yticks=[])
 
-plt.plot(range(len(a_arr)),a_arr)
-ax1.set_prop_cycle(mpl.rcParams['axes.prop_cycle'])
-plt.plot(range(len(s_arr)),s_arr,ls='dotted')
+lines = ax1.plot(range(len(a_arr)),a_arr)
+ax1.set_prop_cycle(plt.rcParams['axes.prop_cycle'])
+lines += ax1.plot(range(len(s_arr)),s_arr,ls='dotted')
 # Autoscale pads, but set_ylim doesn't.  So I add invisible points.
-plt.plot([0,0],[0,size],'y')[0].set_visible(False)
+ax1.plot([0,0],[0,size],'y')[0].set_visible(False)
 
-labels = ["{:2d}a".format(i) for i in range(a_arr.shape[1])] + \
-        ["{:2d}s".format(i) for i in range(s_arr.shape[1])]
-plt.legend(labels)
+ax2.legend(lines,labels,loc="center")
 
-ax2 = plt.twinx()
-ax2.plot(range(len(s_arr)),envs,'go',mfc='white')
+ax1_r = ax1.twinx()
+ax1_r.plot(range(len(s_arr_old)),envs,'go',mfc='white')
 # See above comment
-ax2.plot([0,0],[0,s_arr.shape[1]-1])[0].set_visible(False)
-ax2.grid()
+ax1_r.plot([0,0],[0,s_arr_old.shape[1]-1])[0].set_visible(False)
+ax1_r.grid()
 ax1.grid(axis='x')
 
 plt.savefig("out.pdf")

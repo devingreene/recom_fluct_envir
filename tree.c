@@ -18,14 +18,15 @@ typedef struct _bitstr
     uint32 weight;
 } bitstr ;
 
-#define nwords (nloci/(8*sizeof(uint64)) + 1)
-#define residual ((nloci % (8*sizeof(uint64))) + 1)
-
-uint32 nloci;
-int env;
-uint32 discount;
-uint32 nindiv; 
+/* Globals set by cmdline arguments */
+int nloci;
+int discount;
+int nindiv;
 double shift_rate;
+
+int nwords;
+int residual;
+int env;
 
 uint32 weight(uint64 *bits)
 {
@@ -34,7 +35,7 @@ uint32 weight(uint64 *bits)
     for(i = 0; i < nwords - 1; i++)
         for(s=bits[i];s;s >>= 1)
             res += s&1;
-    for(i=residual - 1,s=bits[nwords-1];s && i > 0;s >>= 1,i--)
+    for(i=0,s=bits[nwords-1];s && i < residual ;s >>= 1,i++)
         res += s&1;
     return res;
 }
@@ -78,10 +79,17 @@ struct node
 struct tree
 {
     struct node *root;
+#if defined(STEPWISE) || defined(DIAG)
     size_t size;
+#endif
 };
 
-struct tree thetree = {NULL, 0};
+struct tree thetree = {NULL
+#if defined(STEPWISE) || defined(DIAG)
+    ,0};
+#else
+};
+#endif
 
 struct arrays
 {
@@ -91,61 +99,83 @@ struct arrays
     int space;
 };
 
-struct arrays array;
+struct arrays thearray;
 
 void initialize_array(void)
 {
-    array.bs = malloc(sizeof(*array.bs)*0x1000);
-    int i;
+    thearray.bs = malloc(sizeof(*thearray.bs)*0x1000);
+    /* Bit strings in one call to malloc */
     uint64 *allbits = malloc(sizeof(uint64)*nwords*0x1000);
+
+    int i;
     for(i=0;i<0x1000;i++,allbits += nwords)
-        array.bs[i].bits = allbits;
-    array.w    = malloc(sizeof(double)*0x1000);
-    array.len  = 0;
-    array.space = 0x1000;
+        thearray.bs[i].bits = allbits;
+    thearray.w    = malloc(sizeof(double)*0x1000);
+    thearray.len  = 0;
+    thearray.space = 0x1000;
 }
 
-void widen_array(void)
+void increase_array_space(void)
 {
-    array.bs = realloc(array.bs,sizeof(*array.bs)*2*array.space);
-    array.w  = realloc(array.w,sizeof(double)*2*array.space);
-    int i ;
-    uint64 *allbits = malloc(sizeof(uint64)*nwords*array.space);
-    for(i=array.space;i<2*array.space;i++,allbits += nwords)
-        array.bs[i].bits = allbits;
-    array.space *= 2;
+    thearray.bs = realloc(thearray.bs,sizeof(*thearray.bs)*thearray.space*2);
+    thearray.w = realloc(thearray.w,sizeof(double)*thearray.space*2);
+
+    uint64 *allbits = malloc(sizeof(uint64)*nwords*thearray.space);
+    int i;
+    for(i=thearray.space;i<2*thearray.space;i++,allbits += nwords)
+        thearray.bs[i].bits = allbits;
+
+    thearray.space *= 2;
 }
 
-int found_sex;
+/* Global for location of sexuals */
+int found_sex = -1;
+
 void append_array(struct node* n)
 {
-    if(array.len > 7*array.space/8)
-    {
-        widen_array();
-    }
 
-    memcpy(array.bs[array.len].bits,n->bs.bits,sizeof(uint64)*nwords);
-    array.bs[array.len].weight = n->bs.weight;
-    array.w[array.len++] = pow(discount,abs(n->bs.weight - env))*n->n;
-    if(found_sex == -1) 
-        array.w[array.len-1] *= 2;
+    if(thearray.len > (7*thearray.space)/8)
+        increase_array_space();
+
+    memcpy(thearray.bs[thearray.len].bits,n->bs.bits,sizeof(uint64)*nwords);
+    /* TODO */
+    /* Necessary? */
+    thearray.bs[thearray.len].weight = n->bs.weight;
+    thearray.w[thearray.len] = pow(discount,abs(n->bs.weight - env))*n->n;
+    if(found_sex < 0) 
+        /* Two-fold advantage */
+        thearray.w[thearray.len] *= 2;
+    thearray.len++;
+    assert(thearray.len <= nindiv);
 }
 
 struct nodecache
 {
     struct node* head;
+#if defined(STEPWISE) || defined(DIAG)
     size_t size;
+#endif
 };
 
-struct nodecache ncache = {NULL,0} ;
+struct nodecache ncache = {NULL
+#if defined(STEPWISE) || defined(DIAG)
+    ,0} ;
+#else
+    };
+#endif
+
+#if defined(STEPWISE) || defined(DIAG)
 size_t hwm_cache = 0;
+#endif
 
 void putnode(struct node *n)
 {
     n->next = ncache.head;
     ncache.head = n;
+#if defined(STEPWISE) || defined(DIAG)
     ncache.size++;
     hwm_cache = (hwm_cache < ncache.size)?ncache.size:hwm_cache;
+#endif
 }
 
 struct node *getnode(bitstr bs)
@@ -155,8 +185,10 @@ struct node *getnode(bitstr bs)
     {
         n = ncache.head;
         ncache.head = n->next;
+#if defined(STEPWISE) || defined(DIAG)
         assert(ncache.size);
         ncache.size--;
+#endif
     }
     else
     {
@@ -192,9 +224,12 @@ void insert(bitstr bs)
    struct node *new = getnode(bs);
 
    *pcursor = new;
+#if defined(STEPWISE) || defined(DIAG)
    thetree.size++;
+#endif
 }
 
+#if defined(STEPWISE) || defined(DIAG)
 void remove_node(struct node **prev, struct node *child)
 {
     struct node *n;
@@ -238,7 +273,9 @@ void delete(bitstr bs)
        }
     }
 }
+#endif
 
+/* Forward declarations */
 int check_sex_bit(bitstr bs);
 void set_sex_bit(bitstr bs);
 
@@ -249,23 +286,25 @@ void plinearize(struct node **pcursor)
     {
         plinearize(&cursor->left);
         *pcursor = cursor->right;
-        if(found_sex == -1 && check_sex_bit(cursor->bs))
-            found_sex = array.len;
+        if(found_sex < 0 && check_sex_bit(cursor->bs))
+            found_sex = thearray.len;
         append_array(cursor);
-
         putnode(cursor);
     }
 }
 
 void linearize(void)
 {
-    array.len = 0;
+    thearray.len = 0;
     found_sex = -1;
+#if defined(STEPWISE) || defined(DIAG)
     thetree.size = 0;
+#endif
     plinearize(&thetree.root);
     assert(!thetree.root);
 }
 
+#if defined(STEPWISE) || defined(DIAG)
 void printbf(struct node *node)
 {
     int i;
@@ -291,6 +330,7 @@ void dumptree(void)
 {
     partialdump(thetree.root);
 }
+#endif
 
 gsl_rng *rng;
 
@@ -309,28 +349,30 @@ void make_children(uint64 *scratch1)
     gsl_ran_discrete_t *tl,*tl_sex = NULL;
 
     linearize();
-    tl = gsl_ran_discrete_preproc(array.len,array.w);
+    tl = gsl_ran_discrete_preproc(thearray.len,thearray.w);
     if(found_sex > -1)
-        tl_sex = gsl_ran_discrete_preproc(array.len - found_sex,
-                array.w + found_sex);
+        tl_sex = gsl_ran_discrete_preproc(thearray.len - found_sex,
+                thearray.w + found_sex);
 
     for(i=0;i<nindiv;i++)
     {
         int k = gsl_ran_discrete(rng,tl);
-        if(found_sex == -1 || k < found_sex)
-             res = array.bs[k];
+        if(found_sex < 0 || k < found_sex)
+             res = thearray.bs[k];
         else
         {
-            uint64 *dad = array.bs[k].bits;
-            uint64 *mom = array.bs[gsl_ran_discrete(rng,tl_sex)].bits;
+            uint64 *dad = thearray.bs[k].bits;
+            uint64 *mom = thearray.bs[gsl_ran_discrete(rng,tl_sex)+found_sex].bits;
             xor(dad,mom,scratch1);
             for(j=0;j<nwords;j++)
             {
+                /* gsl_rng_mt19937 delivers only 32 bits per call */
                 scratch1[j] &= ~gsl_rng_get(rng);
                 scratch1[j] &= ~(gsl_rng_get(rng) << 32);
             }
             xor_me(scratch1,dad);
             res.bits = scratch1;
+            /* We may have cleared sex bit, so reset it */
             set_sex_bit(res);
         }
        insert(res);
@@ -339,14 +381,15 @@ void make_children(uint64 *scratch1)
 
 int check_sex_bit(bitstr bs)
 {
-    return bs.bits[nwords-1] & (1UL << (residual - 1));
+    return !!(bs.bits[nwords-1] & (1UL << residual));
 }
 
 void set_sex_bit(bitstr bs)
 {
-    bs.bits[nwords-1] |= (1UL << (residual - 1));
+    bs.bits[nwords-1] |= (1UL << residual);
 }
 
+/* Globals */
 uint32 *no_sex_weights;
 uint32 *sex_weights;
 
@@ -386,26 +429,79 @@ void shift_env(void)
 int main(int argc, char *argv[])
 {
     bitstr bs;
-    initialize_array();
     initialize_rng();
-    uint64 scratch[nwords];
 
-    if(argc != 7)
+    if(argc != 
+#if !defined(STEPWISE) && !defined(DIAG)
+            7
+#else
+            6
+#endif
+      )
+            
     {
         fprintf(stderr,"Wrong number of arguments\n");
         exit(1);
     }
-    nloci = (uint32)strtoul(argv[1],NULL,0);
+    nloci = (int)strtoul(argv[1],NULL,0);
+    if(nloci < 1)
+    {
+        fprintf(stderr,"Invalid value for nloci\n");
+        goto out;
+    }
     shift_rate = strtod(argv[2],NULL);
     discount = strtod(argv[3],NULL);
-    uint32 nosex = (uint32)strtoul(argv[4],NULL,0);
-    uint32 sex = (uint32)strtoul(argv[5],NULL,0);
-    uint32 ngen = (uint32)strtoul(argv[6],NULL,0);
+    int nosex = (int)strtoul(argv[4],NULL,0);
+    int sex = (int)strtoul(argv[5],NULL,0);
 
+    nwords = nloci/(8*sizeof(uint64)) + 1;
+    residual = nloci % (8*sizeof(uint64));
+    uint64 *scratch = malloc(sizeof(uint64)*nwords);
     nindiv = nosex + sex;
+    if(nindiv < 1)
+    {
+        fprintf(stderr,"Invalid value for population size\n");
+        goto out;
+    }
+
+    initialize_array();
     env = nloci/2;
 
-#if defined(STEPWISE)
+#if !defined(STEPWISE) && !defined(DIAG)
+    int ngen = (int)strtoul(argv[6],NULL,0);
+    int i,j;
+    bs.bits = malloc(sizeof(uint64)*nwords);
+    no_sex_weights = malloc((nloci+1)*sizeof(int));
+    sex_weights = malloc((nloci+1)*sizeof(int));
+    for(i = 0; i < nindiv ; i++)
+    {
+        for(j = 0 ; j < nwords ; j++)
+            bs.bits[j] = gsl_rng_get(rng) + ( gsl_rng_get(rng) << 32 );
+        bs.bits[nwords-1] &= (1UL << residual) - 1;
+        if(i < sex)
+            set_sex_bit(bs);
+        insert(bs);
+    }
+
+    for(i = 0 ; i < ngen && (!i || printf("\n")); i++)
+    {
+        tally_weights();
+        printf("env: %d\n",env);
+        printf("no_sex: 0:%u",no_sex_weights[0]);
+        for(j = 1 ; j < nloci + 1 ; j++)
+            printf(" %u:%u",j,no_sex_weights[j]);
+        printf("\n   sex: 0:%u",sex_weights[0]);
+        for(j = 1 ; j < nloci + 1 ; j++)
+            printf(" %u:%u",j,sex_weights[j]);
+
+        shift_env();
+        make_children(scratch);
+    }
+    printf("\n");
+    return 0;
+out:
+    exit(1);
+#elif defined(STEPWISE)
     uint64 x;
     char s[1024];
     for(;;)
@@ -420,14 +516,14 @@ int main(int argc, char *argv[])
                 dumptree();
                 linearize();
                 int i;
-                for(i = 0; i<array.len;i++)
+                for(i = 0; i<thearray.len;i++)
                 {
-                    printf("0x%016lx ",array.bs[i].bits[0]);
+                    printf("0x%016lx ",thearray.bs[i].bits[0]);
                 } 
                 printf("\n");
-                for(i = 0; i<array.len;i++)
+                for(i = 0; i<thearray.len;i++)
                 {
-                    printf("%f ",array.w[i]);
+                    printf("%f ",thearray.w[i]);
                 }
                 printf("\n");
             }
@@ -494,36 +590,5 @@ int main(int argc, char *argv[])
     dumptree();
     printf("High water mark tree_size: %ld\n",hwm_treesize);
     printf("High water mark cache_size: %ld\n",hwm_cache);
-#else
-
-    uint32 i,j;
-    uint64 X[nwords];
-    bs.bits = X;
-    no_sex_weights = malloc((nloci+1)*sizeof(uint32));
-    sex_weights = malloc((nloci+1)*sizeof(uint32));
-    for(i = 0; i < nindiv ; i++)
-    {
-        for(j = 0 ; j < nwords ; j++)
-            X[j] = gsl_rng_get(rng) + ( gsl_rng_get(rng) << 32 );
-        X[nwords-1] &= (1UL << (residual - 1)) - 1;
-        if(i < sex)
-            set_sex_bit(bs);
-        insert(bs);
-    }
-
-    for(i = 0 ; i < ngen && (!i || printf("\n")); i++)
-    {
-        tally_weights();
-        printf("env: %d\n",env);
-        printf("no_sex: 0:%u",no_sex_weights[0]);
-        for(j = 1 ; j < nloci + 1 ; j++)
-            printf(" %u:%u",j,no_sex_weights[j]);
-        printf("\n   sex: 0:%u",sex_weights[0]);
-        for(j = 1 ; j < nloci + 1 ; j++)
-            printf(" %u:%u",j,sex_weights[j]);
-
-        shift_env();
-        make_children(scratch);
-    }
 #endif
 }

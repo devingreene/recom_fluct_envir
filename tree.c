@@ -21,14 +21,14 @@ typedef struct _bitstr
 } bitstr ;
 
 /* Globals set by cmdline arguments */
-int nloci;
+uint32 nloci;
 double discount;
 double shift_rate;
 double mutation_rate;
 
-int nindiv;
-int nwords;
-int residual;
+uint32 nindiv;
+uint32 nwords;
+uint32 residual;
 int env;
 
 /* Global for location of sexuals */
@@ -36,9 +36,9 @@ int found_sex = -1;
 
 /* High water marks */
 #ifdef DIAG
-size_t hwm_cache = 0;
-int hwm_mutation_sites_space = 8;
-int hwm_power_table_len;
+uint32 hwm_cache = 0;
+uint32 hwm_mutation_sites_space = 8;
+uint32 hwm_power_table_len;
 #endif
 
 /* Forward declarations */
@@ -47,7 +47,7 @@ void mutate(bitstr bs);
 /* Bitstring operations */
 uint32 weight(uint64 *bits)
 {
-    int i,res = 0;
+    uint32 i,res = 0;
     uint64 s = 0;
     for(i = 0; i < nwords - 1; i++)
         for(s=bits[i];s;s >>= 1)
@@ -71,14 +71,14 @@ int cmp(bitstr b1, bitstr b2)
 
 void xor(uint64 *p, uint64 *q, uint64 *res)
 {
-    int i;
+    uint32 i;
     for(i=0;i<nwords;i++)
         res[i] = p[i]^q[i];
 }
 
 void xor_me(uint64 *p, uint64 *q)
 {
-    int i;
+    uint32 i;
     for(i=0;i<nwords;i++)
         p[i] ^= q[i];
 }
@@ -87,7 +87,7 @@ void xor_me(uint64 *p, uint64 *q)
 struct node
 {
     bitstr bs;
-    int n;
+    uint32 n;
     struct node *left;
     struct node *right;
     /* for cache */
@@ -244,7 +244,7 @@ void delete(bitstr bs)
 /* Printing methods */
 void printbf(struct node *node)
 {
-    int i;
+    uint32 i;
     uint64 *bits = node->bs.bits;
     int n = node->n;
     int weight = node->bs.weight;
@@ -273,8 +273,8 @@ struct arrays
 {
     bitstr *bs;
     double *w;
-    int len;
-    int space;
+    uint32 len;
+    uint32 space;
 } thearray;
 
 /* Array methods */
@@ -298,7 +298,7 @@ void increase_array_space(void)
     thearray.w = realloc(thearray.w,sizeof(double)*thearray.space*2);
 
     uint64 *allbits = malloc(sizeof(uint64)*nwords*thearray.space);
-    int i;
+    uint32 i;
     for(i=thearray.space;i<2*thearray.space;i++,allbits += nwords)
         thearray.bs[i].bits = allbits;
 
@@ -374,7 +374,7 @@ void initialize_rng(void)
 
 void make_children(uint64 *scratch1)
 {
-    int i,j;
+    uint32 i,j;
     bitstr res;
     gsl_ran_discrete_t *tl,*tl_sex = NULL;
 
@@ -420,21 +420,21 @@ void shift_env(void)
         env--;
     else if(x < shift_rate)
         env++;
-    env = (env < 0)?0:(env > nloci)?nloci:env;
+    env = (env < 0)?0:(env > (int)nloci)?(int)nloci:env;
 }
 
 /* Mutation data structures */
 struct _mutation_sites
 {
-    int *where;
-    int len;
-    int space;
+    uint32 *where;
+    uint32 len;
+    uint32 space;
 } mutation_sites;
 
 struct _power_table
 {
     double *table;
-    int len;
+    uint32 len;
 } power_table;
 
 void initialize_power_table(void)
@@ -452,7 +452,7 @@ void initialize_power_table(void)
 void extend_power_table(void)
 {
     power_table.table = realloc(power_table.table,sizeof(double)*(power_table.len+8));
-    int i;
+    uint32 i;
     for(i = 0 ; i < 8 && i + power_table.len < nloci ; i++)
         power_table.table[i+power_table.len] = pow(1 - mutation_rate,nloci-i-power_table.len);
     power_table.len += 8;
@@ -478,7 +478,7 @@ void widen_mutation_sites(void)
 
 void mutate(bitstr bs)
 {
-   int i,j,where,remaining_sites = nloci;
+   uint32 i,j,where,remaining_sites = nloci;
 
    if(1. - mutation_rate == 1.)
        return;
@@ -547,11 +547,11 @@ int main(int argc, char *argv[])
     }
     shift_rate = strtod(argv[2],NULL);
     discount = strtod(argv[3],NULL);
-    int nosex = (int)strtoul(argv[4],NULL,0);
-    int sex = (int)strtoul(argv[5],NULL,0);
+    uint32 nosex = (int)strtoul(argv[4],NULL,0);
+    uint32 sex = (int)strtoul(argv[5],NULL,0);
     mutation_rate = strtod(argv[6],NULL);
 #if !defined(STEPWISE)
-    int ngen = (int)strtoul(argv[7],NULL,0);
+    uint32 ngen = (uint32)strtoul(argv[7],NULL,0);
 #endif
 
     if(mutation_rate < 0 || mutation_rate > 1)
@@ -584,7 +584,7 @@ int main(int argc, char *argv[])
 
     bs.bits = malloc(sizeof(uint64)*nwords);
 #if !defined(STEPWISE) && !defined(DIAG)
-    int i,j;
+    uint32 i,j;
     for(i = 0; i < nindiv ; i++)
     {
         for(j = 0 ; j < nwords ; j++)
@@ -626,7 +626,7 @@ int main(int argc, char *argv[])
             {
                 dumptree();
                 linearize_and_tally_weights();
-                int i;
+                uint32 i;
                 for(i = 0; i<thearray.len;i++)
                 {
                     printf("0x%016lx ",thearray.bs[i].bits[0]);
@@ -677,8 +677,7 @@ int main(int argc, char *argv[])
 
     }
 #elif defined(DIAG)
-    int i,j;
-    size_t hwm_treesize = 0;
+    uint32 i,j,hwm_treesize = 0;
     for(i=0;i<nindiv;i++)
     {
         for(j=0;j<nwords;j++)
@@ -699,10 +698,10 @@ int main(int argc, char *argv[])
 
     printf("End\n");
     dumptree();
-    printf("High water mark tree_size: %ld\n",hwm_treesize);
-    printf("High water mark cache_size: %ld\n",hwm_cache);
-    printf("High water mark power_table.len: %d\n",hwm_power_table_len);
-    printf("High water mark mutation_sites.space: %d\n",hwm_mutation_sites_space);
+    printf("High water mark tree_size: %u\n",hwm_treesize);
+    printf("High water mark cache_size: %u\n",hwm_cache);
+    printf("High water mark power_table.len: %u\n",hwm_power_table_len);
+    printf("High water mark mutation_sites.space: %u\n",hwm_mutation_sites_space);
     return 0;
 #endif
 out:

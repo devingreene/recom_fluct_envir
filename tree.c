@@ -9,6 +9,8 @@
 #include<gsl/gsl_rng.h>
 #include<gsl/gsl_randist.h>
 
+#define bitspword (8*sizeof(uint64))
+
 typedef unsigned long uint64;
 typedef unsigned int uint32;
 
@@ -20,9 +22,10 @@ typedef struct _bitstr
 
 /* Globals set by cmdline arguments */
 int nloci;
-int discount;
 int nindiv;
+double discount;
 double shift_rate;
+double mutation_rate;
 
 int nwords;
 int residual;
@@ -43,7 +46,7 @@ uint32 weight(uint64 *bits)
 int cmp(bitstr b1, bitstr b2)
 {
     int i;
-    for(i = 0 ; i < nwords ; i++)
+    for(i = nwords - 1 ; i >= 0 ; i--)
     {
         if(b1.bits[i] == b2.bits[i])
             continue;
@@ -138,7 +141,7 @@ void append_array(struct node* n)
         increase_array_space();
 
     memcpy(thearray.bs[thearray.len].bits,n->bs.bits,sizeof(uint64)*nwords);
-    /* TODO */
+    /* XXX */
     /* Necessary? */
     thearray.bs[thearray.len].weight = n->bs.weight;
     thearray.w[thearray.len] = pow(discount,abs(n->bs.weight - env))*n->n;
@@ -279,28 +282,42 @@ void delete(bitstr bs)
 int check_sex_bit(bitstr bs);
 void set_sex_bit(bitstr bs);
 
-void plinearize(struct node **pcursor)
+/* Globals */
+uint32 *no_sex_weights;
+uint32 *sex_weights;
+
+void plinearize_and_tally_weights(struct node **pcursor)
 {
     struct node* cursor;
     while((cursor = *pcursor))
     {
-        plinearize(&cursor->left);
+#ifdef DIAG
+        if(found_sex > 0)
+            assert(check_sex_bit(cursor->bs));
+#endif
+        plinearize_and_tally_weights(&cursor->left);
         *pcursor = cursor->right;
         if(found_sex < 0 && check_sex_bit(cursor->bs))
             found_sex = thearray.len;
         append_array(cursor);
+        if(found_sex >= 0)
+            sex_weights[cursor->bs.weight] += cursor->n;
+        else
+            no_sex_weights[cursor->bs.weight] += cursor->n ;
         putnode(cursor);
     }
 }
 
-void linearize(void)
+void linearize_and_tally_weights(void)
 {
     thearray.len = 0;
     found_sex = -1;
+    memset(no_sex_weights,0,(nloci+1)*sizeof(uint32));
+    memset(sex_weights,0,(nloci+1)*sizeof(uint32));
 #if defined(STEPWISE) || defined(DIAG)
     thetree.size = 0;
 #endif
-    plinearize(&thetree.root);
+    plinearize_and_tally_weights(&thetree.root);
     assert(!thetree.root);
 }
 
@@ -342,13 +359,15 @@ void initialize_rng(void)
     gsl_rng_set(rng,seed);
 }
 
+/* Forward declaration */
+void mutate(bitstr bs);
 void make_children(uint64 *scratch1)
 {
     int i,j;
     bitstr res;
     gsl_ran_discrete_t *tl,*tl_sex = NULL;
 
-    linearize();
+    linearize_and_tally_weights();
     tl = gsl_ran_discrete_preproc(thearray.len,thearray.w);
     if(found_sex > -1)
         tl_sex = gsl_ran_discrete_preproc(thearray.len - found_sex,
@@ -358,7 +377,10 @@ void make_children(uint64 *scratch1)
     {
         int k = gsl_ran_discrete(rng,tl);
         if(found_sex < 0 || k < found_sex)
-             res = thearray.bs[k];
+        {
+            memcpy(scratch1,thearray.bs[k].bits,sizeof(uint64)*nwords);
+            res.bits = scratch1;
+        }
         else
         {
             uint64 *dad = thearray.bs[k].bits;
@@ -375,7 +397,8 @@ void make_children(uint64 *scratch1)
             /* We may have cleared sex bit, so reset it */
             set_sex_bit(res);
         }
-       insert(res);
+        mutate(res);
+        insert(res);
     }
 }
 
@@ -389,33 +412,6 @@ void set_sex_bit(bitstr bs)
     bs.bits[nwords-1] |= (1UL << residual);
 }
 
-/* Globals */
-uint32 *no_sex_weights;
-uint32 *sex_weights;
-
-void ptally_weights(struct node **pcursor)
-{
-    struct node *cursor = *pcursor;
-    bitstr bs;
-    if(!cursor) return;
-
-    ptally_weights(&(cursor->left));
-    bs = cursor->bs;
-    if(check_sex_bit(bs))
-        sex_weights[cursor->bs.weight] += cursor->n ;
-    else
-        no_sex_weights[cursor->bs.weight] += cursor->n ;
-    ptally_weights(&(cursor->right));
-}
-
-void tally_weights()
-{
-    memset(no_sex_weights,0,(nloci+1)*sizeof(uint32));
-    memset(sex_weights,0,(nloci+1)*sizeof(uint32));
-
-    ptally_weights(&thetree.root);
-}
-
 void shift_env(void)
 {
     double x = gsl_rng_uniform(rng);
@@ -426,16 +422,118 @@ void shift_env(void)
     env = (env < 0)?0:(env > nloci)?nloci:env;
 }
 
+/* Global */
+struct _mutation_sites
+{
+    int *where;
+    int len;
+    int space;
+} mutation_sites;
+struct _power_table
+{
+    double *table;
+    int len;
+} power_table;
+#ifdef DIAG
+int hwm_mutation_sites_space = 8;
+int hwm_power_table_len;
+#endif
+
+void initialize_power_table(void)
+{
+    power_table.table = malloc(sizeof(double)*8);
+    power_table.len = 8;
+    int i;
+    for(i = 0 ; i < 8 ; i++)
+        power_table.table[i] = pow(1 - mutation_rate,nloci-i);
+#ifdef DIAG
+    hwm_power_table_len = 8;
+#endif
+}
+
+void extend_power_table(void)
+{
+    power_table.table = realloc(power_table.table,sizeof(double)*(power_table.len+8));
+    int i;
+    for(i = 0 ; i < 8 && i + power_table.len < nloci ; i++)
+        power_table.table[i+power_table.len] = pow(1 - mutation_rate,nloci-i-power_table.len);
+    power_table.len += 8;
+    if(power_table.len >= nloci)
+        power_table.len = nloci;
+#ifdef DIAG
+    hwm_power_table_len = hwm_power_table_len < power_table.len?power_table.len:hwm_power_table_len;
+#endif
+}
+
+void widen_mutation_sites(void)
+{
+    mutation_sites.where = 
+        realloc(mutation_sites.where,sizeof(int)*(mutation_sites.space+8));
+    mutation_sites.space += 8;
+    if(mutation_sites.space > nloci)
+        mutation_sites.space = nloci;
+#ifdef DIAG
+    hwm_mutation_sites_space = 
+        hwm_mutation_sites_space < mutation_sites.space?mutation_sites.space:hwm_mutation_sites_space;
+#endif
+}
+
+void mutate(bitstr bs)
+{
+   int i,j,where,remaining_sites = nloci;
+
+   if(1. - mutation_rate == 1.)
+       return;
+
+   /* Mutate every god damn one */
+   if(mutation_rate == 1.)
+   {
+        for(i = 0 ; i < nwords - 1 ; i++)
+            bs.bits[i] ^= ~0UL;
+        bs.bits[nwords - 1] ^= (1UL << residual) - 1;
+        return;
+   }
+
+   mutation_sites.len = 0;
+   for(i = 0 ;i < power_table.len ; i++)
+   {
+with_bigger_table:
+       if(gsl_rng_uniform(rng) < power_table.table[i])
+           break;
+       where = gsl_rng_uniform_int(rng,remaining_sites--);
+
+       for(j = 0 ; j < mutation_sites.len; j++)
+       {
+           if(where == j)
+               where++;
+       }
+       assert(where < nloci);
+       mutation_sites.where[mutation_sites.len++] = where;
+       if(mutation_sites.space < nloci && mutation_sites.len >= mutation_sites.space)
+           widen_mutation_sites();
+   }
+   if(i == power_table.len && i < nloci)
+   {
+       extend_power_table();
+       goto with_bigger_table;
+   }
+   for(i = 0 ; i < mutation_sites.len ; i++)
+   {
+       int where = mutation_sites.where[i];
+       bs.bits[where/bitspword] ^= (1UL << (where % bitspword));
+   }
+}
+
 int main(int argc, char *argv[])
 {
     bitstr bs;
     initialize_rng();
 
     if(argc != 
-#if !defined(STEPWISE) && !defined(DIAG)
-            7
+#if !defined(STEPWISE)
+            8
 #else
-            6
+            7
 #endif
       )
             
@@ -453,26 +551,42 @@ int main(int argc, char *argv[])
     discount = strtod(argv[3],NULL);
     int nosex = (int)strtoul(argv[4],NULL,0);
     int sex = (int)strtoul(argv[5],NULL,0);
+    mutation_rate = strtod(argv[6],NULL);
+#if !defined(STEPWISE)
+    int ngen = (int)strtoul(argv[7],NULL,0);
+#endif
 
-    nwords = nloci/(8*sizeof(uint64)) + 1;
-    residual = nloci % (8*sizeof(uint64));
-    uint64 *scratch = malloc(sizeof(uint64)*nwords);
+    if(mutation_rate < 0 || mutation_rate > 1)
+    {
+        fprintf(stderr,"Invalid value for mutation rate: %s\n",argv[6]);
+        goto out;
+    }
+
+    nwords = nloci/bitspword + 1;
+    residual = nloci % bitspword;
+
     nindiv = nosex + sex;
     if(nindiv < 1)
     {
-        fprintf(stderr,"Invalid value for population size\n");
+        fprintf(stderr,"Invalid value for population size: %s + %s\n",argv[4],argv[5]);
         goto out;
     }
 
     initialize_array();
+    initialize_power_table();
+    mutation_sites.where = malloc(sizeof(int)*10);
+    mutation_sites.len = 0;
+    mutation_sites.space = 8;
+    uint64 *scratch = malloc(sizeof(uint64)*nwords);
+
     env = nloci/2;
 
-#if !defined(STEPWISE) && !defined(DIAG)
-    int ngen = (int)strtoul(argv[6],NULL,0);
-    int i,j;
-    bs.bits = malloc(sizeof(uint64)*nwords);
     no_sex_weights = malloc((nloci+1)*sizeof(int));
     sex_weights = malloc((nloci+1)*sizeof(int));
+
+    bs.bits = malloc(sizeof(uint64)*nwords);
+#if !defined(STEPWISE) && !defined(DIAG)
+    int i,j;
     for(i = 0; i < nindiv ; i++)
     {
         for(j = 0 ; j < nwords ; j++)
@@ -485,7 +599,9 @@ int main(int argc, char *argv[])
 
     for(i = 0 ; i < ngen && (!i || printf("\n")); i++)
     {
-        tally_weights();
+        make_children(scratch);
+
+        // tally_weights();
         printf("env: %d\n",env);
         printf("no_sex: 0:%u",no_sex_weights[0]);
         for(j = 1 ; j < nloci + 1 ; j++)
@@ -495,12 +611,9 @@ int main(int argc, char *argv[])
             printf(" %u:%u",j,sex_weights[j]);
 
         shift_env();
-        make_children(scratch);
     }
     printf("\n");
     return 0;
-out:
-    exit(1);
 #elif defined(STEPWISE)
     uint64 x;
     char s[1024];
@@ -514,7 +627,7 @@ out:
             if(s[0] == 'd')
             {
                 dumptree();
-                linearize();
+                linearize_and_tally_weights();
                 int i;
                 for(i = 0; i<thearray.len;i++)
                 {
@@ -566,21 +679,21 @@ out:
 
     }
 #elif defined(DIAG)
-    int i,j,gens = strtol(argv[1],NULL,0);
-    uint64 X[nwords];
-    bs.bits = X;
+    int i,j;
     size_t hwm_treesize = 0;
     for(i=0;i<nindiv;i++)
     {
         for(j=0;j<nwords;j++)
-            X[j] = gsl_rng_get(rng) + (gsl_rng_get(rng) << 32);
-        X[nwords-1] &= (1 << (nloci + 1) % (8*sizeof(uint64))) - 1;
+            bs.bits[j] = gsl_rng_get(rng) + (gsl_rng_get(rng) << 32);
+        bs.bits[nwords-1] &= (1UL << residual) - 1;
+        if(i < sex)
+            set_sex_bit(bs);
         insert(bs);
     }
 
     printf("Start\n");
     dumptree();
-    for(i=0;i<gens;i++)
+    for(i=0;i<ngen;i++)
     {
         make_children(scratch);
         hwm_treesize = (hwm_treesize >= thetree.size)?hwm_treesize:thetree.size;
@@ -590,5 +703,10 @@ out:
     dumptree();
     printf("High water mark tree_size: %ld\n",hwm_treesize);
     printf("High water mark cache_size: %ld\n",hwm_cache);
+    printf("High water mark power_table.len: %d\n",hwm_power_table_len);
+    printf("High water mark mutation_sites.space: %d\n",hwm_mutation_sites_space);
+    return 0;
 #endif
+out:
+    exit(1);
 }

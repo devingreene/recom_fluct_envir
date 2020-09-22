@@ -56,13 +56,14 @@ except StopIteration:
 
 import subprocess
 
-res = subprocess.run(
-        ["./exec",str(nl),str(tp),str(fd),str(nai),str(nsi),str(nit)],
-        capture_output=True)
+exec_args = ["./exec",str(nl),str(tp),str(fd),str(nai),str(nsi),str(mr),str(nit)]
+print(" ".join(exec_args),file=sys.stderr)
+res = subprocess.run(exec_args,capture_output=True)
+
 
 rc = res.returncode
 if rc != 0:
-    sys.stderr.write(res.stderr.decode())
     sys.exit(rc)
 else:
     sys.stdout.write(res.stdout.decode())
+sys.stderr.write(res.stderr.decode())

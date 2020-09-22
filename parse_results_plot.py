@@ -35,7 +35,7 @@ for line in sys.stdin:
 nloci = a_arr.shape[1] - 1
 a_arr_old = a_arr
 s_arr_old = s_arr
-nbins = nloci
+nbins = nloci + 1
 if nloci > 10:
     nbins = 10
     lendpts = np.linspace(0,nloci+1,nbins+1)

@@ -3,8 +3,8 @@
 #include<string.h>
 #include<math.h>
 #include<assert.h>
-
-#include<sys/random.h>
+#include<fcntl.h>
+#include<unistd.h>
 
 #include<gsl/gsl_rng.h>
 #include<gsl/gsl_randist.h>
@@ -332,7 +332,7 @@ void append_array(struct node* n)
     /* XXX */
     /* Necessary? */
     thearray.bs[thearray.len].weight = n->bs.weight;
-    thearray.w[thearray.len] = pow(discount,abs(n->bs.weight - env))*n->n;
+    thearray.w[thearray.len] = pow(discount,abs((int)n->bs.weight - env))*n->n;
     if(found_sex < 0) 
         /* Two-fold advantage */
         thearray.w[thearray.len] *= 2;
@@ -399,10 +399,22 @@ gsl_rng *rng;
 void initialize_rng(void)
 {
     uint64 seed;
+    int fd;
     rng = gsl_rng_alloc( gsl_rng_mt19937 );
-    if(getrandom(&seed,sizeof(seed),0) < (ssize_t)sizeof(seed))
+    if((fd = open("/dev/urandom",O_RDONLY)) < 0)
+    {
+        fprintf(stderr,"Failed to open \"/dev/urandom\"");
+        exit(1);
+    }
+
+    if(read(fd,&seed,sizeof(seed)) < (ssize_t)sizeof(seed))
     {
         fprintf(stderr,"Failed to properly initialize random number generator");
+        exit(1);
+    }
+    if(close(fd) < 0)
+    {
+        fprintf(stderr,"Failed to close \"/dev/urandom\"");
         exit(1);
     }
     gsl_rng_set(rng,seed);

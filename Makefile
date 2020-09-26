@@ -1,2 +1,2 @@
 exec: tree.c
-	cc -Wall -Wextra -o exec tree.c -lm -lgsl -lgslcblas
+	cc -Wall -Wextra -O2 -o exec tree.c -lm -lgsl -lgslcblas

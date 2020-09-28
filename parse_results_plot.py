@@ -7,7 +7,7 @@ to_int = pyparsing_common.integer
 
 to_float = pyparsing_common.fnumber
 
-env_pattern = Suppress(Literal("env") + ":") + to_int
+env_pattern = Suppress(Literal("env") + ":") + to_float
 
 def tally_pattern(label):
     return Suppress(label + ":") + OneOrMore(Suppress(to_int + ":") + to_int)

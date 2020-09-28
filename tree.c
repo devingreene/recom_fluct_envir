@@ -10,6 +10,13 @@
 #include<gsl/gsl_randist.h>
 
 #define bitspword (8*sizeof(uint64))
+#define INVALID(cond,name,arg) \
+    if((cond)) \
+    { \
+        fprintf(stderr,"Invalid value for " #name ": %s\n",arg); \
+        exit(1); \
+    }
+#define ENVELOPE_DEGREE (6)
 
 typedef unsigned long uint64;
 typedef unsigned int uint32;
@@ -25,12 +32,13 @@ typedef struct _bitstr
 uint32 nloci;
 double discount;
 double shift_rate;
+double shift_size;
 double mutation_rate;
 
 uint32 nindiv;
 uint32 nwords;
 uint32 residual;
-int env;
+double env;
 
 /* Global for location of sexuals */
 int found_sex = -1;
@@ -450,14 +458,29 @@ void make_children(uint64 *scratch1)
     }
 }
 
-void shift_env(void)
+inline double env_envelope(double x)
 {
-    double x = gsl_rng_uniform(rng);
-    if(x < shift_rate/2)
-        env--;
-    else if(x < shift_rate)
-        env++;
-    env = (env < 0)?0:(env > (int)nloci)?(int)nloci:env;
+    if(x > nloci || x < 0)
+        return 0;
+    x /= nloci/2.;
+    x -= 1;
+    return 1 - pow(x,ENVELOPE_DEGREE);
+}
+
+void pick_new_env(void)
+{
+    double cand = env + gsl_ran_gaussian_ziggurat(rng,shift_size);
+    double here = env_envelope(env);
+    double there = env_envelope(cand);
+    double chance = there/here;
+    if(!isfinite(chance))
+    {
+        fprintf(stderr,"Has undefined Metropolitan-Hastings probability: exiting\n");
+        exit(1);
+    }
+
+    if(gsl_rng_uniform(rng) < chance)
+        env = cand;
 }
 
 /* Mutation data structures */
@@ -582,6 +605,7 @@ int main(int argc, char *argv[])
                 "./exec \\\n"
                 "   nloci \\\n"
                 "   shift_rate \\\n"
+                "   shift_size \\\n"
                 "   discount \\\n"
                 "   nosex \\\n"
                 "   sex \\\n"
@@ -595,47 +619,41 @@ int main(int argc, char *argv[])
 
     if(argc != 
 #if defined(STEPWISE)
-            7
-#else
             8
+#else
+            9
 #endif
       )
-            
     {
         fprintf(stderr,"Wrong number of arguments\n");
         exit(1);
     }
+
     nloci = (uint32)strtoul(argv[1],NULL,0);
-    if((int)nloci <= 0)
-    {
-        fprintf(stderr,"Invalid value for nloci: %s\n",argv[1]);
-        goto out;
-    }
+    INVALID((int)nloci <= 0,nloci,argv[1]);
     shift_rate = strtod(argv[2],NULL);
-    discount = strtod(argv[3],NULL);
-    uint32 nosex = (uint32)strtoul(argv[4],NULL,0);
-    uint32 sex = (uint32)strtoul(argv[5],NULL,0);
-    mutation_rate = strtod(argv[6],NULL);
+    INVALID(shift_rate < 0 || shift_rate > 1,shift_rate,argv[2]);
+    shift_size = strtod(argv[3],NULL);
+    INVALID(shift_size < 0,shift_size,argv[3]);
+    discount = strtod(argv[4],NULL);
+    INVALID(discount < 0 || discount > 1,discount,argv[4]);
+    uint32 nosex = (uint32)strtoul(argv[5],NULL,0);
+    uint32 sex = (uint32)strtoul(argv[6],NULL,0);
+    mutation_rate = strtod(argv[7],NULL);
+    INVALID(mutation_rate < 0 || mutation_rate > 1,mutation_rate,argv[7]);
 #if !defined(STEPWISE)
-    uint32 ngen = (uint32)strtoul(argv[7],NULL,0);
+    uint32 ngen = (uint32)strtoul(argv[8],NULL,0);
 #endif
 
-    if(mutation_rate < 0 || mutation_rate > 1)
-    {
-        fprintf(stderr,"Invalid value for mutation rate: %s\n",argv[6]);
-        goto out;
-    }
-
-    /* Extra padding for sex it */
+    /* Extra padding for sex bit */
     nwords = nloci/bitspword + 1;
     residual = nloci % bitspword;
 
     nindiv = nosex + sex;
     if( (int)nosex < 0 || (int)sex < 0 || nindiv == 0)
-    
     {
         fprintf(stderr,"Invalid value for population size: nosex: %s, sex: %s\n",argv[4],argv[5]);
-        goto out;
+        exit(1);
     }
 
     /* initialize structures */
@@ -667,7 +685,7 @@ int main(int argc, char *argv[])
         make_children(scratch);
 
         /* Print weights */
-        printf("env: %d\n",env);
+        printf("env: %8.2f\n",env);
         printf("no_sex: 0:%u",no_sex_weights[0]);
         for(j = 1 ; j < nloci + 1 ; j++)
             printf(" %u:%u",j,no_sex_weights[j]);
@@ -675,7 +693,7 @@ int main(int argc, char *argv[])
         for(j = 1 ; j < nloci + 1 ; j++)
             printf(" %u:%u",j,sex_weights[j]);
 
-        shift_env();
+        pick_new_env();
     }
     printf("\n");
     return 0;
@@ -776,6 +794,4 @@ int main(int argc, char *argv[])
     printf("Mutation events: %lu\n",mutation_events);
     return 0;
 #endif
-out:
-    exit(1);
 }

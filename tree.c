@@ -340,7 +340,7 @@ void append_array(struct node* n)
     /* XXX */
     /* Necessary? */
     thearray.bs[thearray.len].weight = n->bs.weight;
-    thearray.w[thearray.len] = pow(discount,abs(n->bs.weight - env))*n->n;
+    thearray.w[thearray.len] = pow(discount,fabs((int)n->bs.weight - env))*n->n;
     if(found_sex < 0) 
         /* Two-fold advantage */
         thearray.w[thearray.len] *= 2;

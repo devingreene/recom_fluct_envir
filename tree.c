@@ -364,10 +364,6 @@ void plinearize_and_tally_weights(struct node **pcursor)
     struct node* cursor;
     while((cursor = *pcursor))
     {
-#ifdef DIAG
-        if(found_sex > 0)
-            assert(check_sex_bit(cursor->bs));
-#endif
         plinearize_and_tally_weights(&cursor->left);
         *pcursor = cursor->right;
         if(found_sex < 0 && check_sex_bit(cursor->bs))
@@ -378,6 +374,11 @@ void plinearize_and_tally_weights(struct node **pcursor)
         else
             no_sex_weights[cursor->bs.weight] += cursor->n ;
         putnode(cursor);
+#ifdef DIAG
+        int sex_bit = check_sex_bit(cursor->bs);
+        assert(( found_sex >= 0 && sex_bit ) ||
+                ( found_sex < 0 && !sex_bit ) );
+#endif
     }
 }
 

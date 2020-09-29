@@ -499,7 +499,7 @@ struct _power_table
 
 void initialize_mutation_sites(void)
 {
-    mutation_sites.where = malloc(sizeof(uint32)*10);
+    mutation_sites.where = malloc(sizeof(uint32)*8);
     mutation_sites.len = 0;
     mutation_sites.space = 8;
 #ifdef DIAG

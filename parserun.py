@@ -44,8 +44,8 @@ import subprocess
 
 exec_args = ["./exec",str(nl),str(sr),str(ss),str(fd),str(nai),str(nsi),str(mr),str(nit)]
 print(" ".join(exec_args),file=sys.stderr)
-res = subprocess.run(exec_args,capture_output=True)
-
+res = subprocess.run(exec_args,stdout = subprocess.PIPE,
+        stderr = subprocess.PIPE)
 
 rc = res.returncode
 if rc != 0:

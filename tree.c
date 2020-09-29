@@ -4,6 +4,11 @@
 #include<math.h>
 #include<assert.h>
 
+#if MACOSX
+#include<fcntl.h>
+#include<unistd.h>
+#endif
+
 #include<sys/random.h>
 
 #include<gsl/gsl_rng.h>
@@ -409,11 +414,28 @@ void initialize_rng(void)
 {
     uint64 seed;
     rng = gsl_rng_alloc( gsl_rng_mt19937 );
+#if MACOSX
+    int fd;
+    if((fd = open("/dev/urandom",O_RDONLY)) < 0)
+    {
+        fprintf(stderr,"Failed to open \"/dev/urandom\"");
+        exit(1);
+    }
+    if(read(fd,&seed,sizeof(seed)) < (ssize_t)sizeof(seed))
+#else
     if(getrandom(&seed,sizeof(seed),0) < (ssize_t)sizeof(seed))
+#endif
     {
         fprintf(stderr,"Failed to properly initialize random number generator");
         exit(1);
     }
+#if MACOSX
+    if(close(fd) < 0)
+    {
+        fprintf(stderr,"Failed to close \"/dev/urandom\"");
+        exit(1);
+    }
+#endif
     gsl_rng_set(rng,seed);
 }
 
@@ -728,7 +750,7 @@ int main(int argc, char *argv[])
             {
                 make_children(scratch);
                 dump_array();
-                printf("%d\n",found_sex);
+                printf("Found sex?: %d\n",found_sex);
                 dumptree();
             }
 

@@ -76,11 +76,13 @@ ax2 = plt.subplot(1,6,6,frame_on=False,xticks=[],yticks=[])
 
 lines = ax1.plot(range(len(a_arr)),a_arr)
 ax1.set_prop_cycle(plt.rcParams['axes.prop_cycle'])
-lines += ax1.plot(range(len(s_arr)),s_arr,ls='dotted')
+lines += ax1.plot(range(len(s_arr)),s_arr,ls='dashed')
 # Autoscale pads, but set_ylim doesn't.  So I add invisible points.
 ax1.plot([0,0],[0,size],'y')[0].set_visible(False)
 
-ax2.legend(lines,labels,loc="center")
+leg =ax2.legend(lines,labels,loc="center")
+for line in leg.get_lines():
+    line.set_linewidth(1.5*line.get_linewidth())
 
 ax1_r = ax1.twinx()
 ax1_r.plot(range(len(s_arr_old)),envs,'go',mfc='white')

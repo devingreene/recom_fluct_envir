@@ -40,9 +40,24 @@ except StopIteration:
     print("Too many lines in config file",file=sys.stderr)
     sys.exit(1)
 
+import getopt
+
+m = '0'
+if ('-m','') in getopt.gnu_getopt(sys.argv[1:],'m',['dump'])[0]:
+    m = '1'
+
 import subprocess
 
-exec_args = ["./exec",str(nl),str(sr),str(ss),str(fd),str(nai),str(nsi),str(mr),str(nit)]
+exec_args = ["./exec",str(nl),
+                      str(sr),
+                      str(ss),
+                      str(fd),
+                      str(nai),
+                      str(nsi),
+                      str(mr),
+                      m,
+                      str(nit)]
+
 print(" ".join(exec_args),file=sys.stderr)
 res = subprocess.run(exec_args,stdout = subprocess.PIPE,
         stderr = subprocess.PIPE)
@@ -52,4 +67,8 @@ if rc != 0:
     sys.exit(rc)
 else:
     sys.stdout.write(res.stdout.decode())
-sys.stderr.write(res.stderr.decode())
+
+err_msg = res.stderr.decode()
+if err_msg:
+    print("Errors:",file=sys.stderr)
+    sys.stderr.write(err_msg)

@@ -39,6 +39,7 @@ double discount;
 double shift_rate;
 double shift_size;
 double mutation_rate;
+uint32 sex_change;
 
 uint32 nindiv;
 uint32 nwords;
@@ -531,11 +532,12 @@ void initialize_mutation_sites(void)
 
 void initialize_power_table(void)
 {
+    uint32 nloci1 = nloci + sex_change;
     power_table.table = malloc(sizeof(double)*8);
     power_table.len = 8;
     int i;
     for(i = 0 ; i < 8 ; i++)
-        power_table.table[i] = pow(1 - mutation_rate,nloci-i);
+        power_table.table[i] = pow(1 - mutation_rate,nloci1-i);
 #ifdef DIAG
     hwm_power_table_len = 8;
 #endif
@@ -543,13 +545,14 @@ void initialize_power_table(void)
 
 void extend_power_table(void)
 {
+    uint32 nloci1 = nloci + sex_change;
     power_table.table = realloc(power_table.table,sizeof(double)*(power_table.len+8));
     uint32 i;
-    for(i = 0 ; i < 8 && i + power_table.len < nloci ; i++)
-        power_table.table[i+power_table.len] = pow(1 - mutation_rate,nloci-i-power_table.len);
+    for(i = 0 ; i < 8 && i + power_table.len < nloci1 ; i++)
+        power_table.table[i+power_table.len] = pow(1 - mutation_rate,nloci1-i-power_table.len);
     power_table.len += 8;
-    if(power_table.len >= nloci)
-        power_table.len = nloci;
+    if(power_table.len >= nloci1)
+        power_table.len = nloci1;
 #ifdef DIAG
     hwm_power_table_len = power_table.len;
 #endif
@@ -557,11 +560,12 @@ void extend_power_table(void)
 
 void widen_mutation_sites(void)
 {
+    uint32 nloci1 = nloci + sex_change;
     mutation_sites.where = 
         realloc(mutation_sites.where,sizeof(int)*(mutation_sites.space+8));
     mutation_sites.space += 8;
-    if(mutation_sites.space > nloci)
-        mutation_sites.space = nloci;
+    if(mutation_sites.space > nloci1)
+        mutation_sites.space = nloci1;
 #ifdef DIAG
     hwm_mutation_sites_space = mutation_sites.space;
 #endif
@@ -569,7 +573,9 @@ void widen_mutation_sites(void)
 
 void mutate(bitstr bs)
 {
-   uint32 i,j,oldwhere,where,remaining_sites = nloci;
+   uint32 i,j;
+   /* If sex_bit can mutate */
+   uint32 nloci1 = nloci + sex_change;
 
    if(1. - mutation_rate == 1.)
        return;
@@ -580,12 +586,15 @@ void mutate(bitstr bs)
         for(i = 0 ; i < nwords - 1 ; i++)
             bs.bits[i] ^= ~0UL;
         bs.bits[nwords - 1] ^= (1UL << residual) - 1;
+        if(sex_change)
+            bs.bits[nwords - 1] ^= 1UL << residual;
 #ifdef DIAG
-        mutation_events += nloci;
+        mutation_events += nloci1;
 #endif
         return;
    }
 
+   uint32 remaining_sites = nloci1;
    mutation_sites.len = 0;
    for(i = 0 ;i < power_table.len ; i++)
    {
@@ -595,33 +604,43 @@ with_bigger_table:
 #ifdef DIAG
        mutation_events++;
 #endif
-       where = gsl_rng_uniform_int(rng,remaining_sites--);
+       uint32 where = gsl_rng_uniform_int(rng,remaining_sites--);
+       uint32 oldwhere;
 
-
-       /* Loop until we get list with no repeats */
+       /* Loop until we get list with no repeats, and all 
+        * sites are selected with equal probability */
        do
        {
            oldwhere = where;
            for(j = 0 ; j < mutation_sites.len; j++)
            {
-               if(where == mutation_sites.where[j])
+               if(where >= mutation_sites.where[j])
+               {
                    where++;
+                   /* Mark as checked */
+                   mutation_sites.where[j] += nloci1;
+               }
            }
        } while(oldwhere != where);
 
-       assert(where < nloci);
+       /* Unmark */
+       for(j = 0 ; j < mutation_sites.len; j++)
+           if(mutation_sites.where[j] >= nloci1)
+               mutation_sites.where[j] -= nloci1;
+
+       assert(where < nloci1);
        mutation_sites.where[mutation_sites.len++] = where;
-       if(mutation_sites.space < nloci && mutation_sites.len >= mutation_sites.space)
+       if(mutation_sites.space < nloci1 && mutation_sites.len >= mutation_sites.space)
            widen_mutation_sites();
    }
-   if(i == power_table.len && i < nloci)
+   if(i == power_table.len && i < nloci1)
    {
        extend_power_table();
        goto with_bigger_table;
    }
    for(i = 0 ; i < mutation_sites.len ; i++)
    {
-       where = mutation_sites.where[i];
+       uint32 where = mutation_sites.where[i];
        bs.bits[where/bitspword] ^= (1UL << (where % bitspword));
    }
 }
@@ -639,6 +658,7 @@ int main(int argc, char *argv[])
                 "   nosex \\\n"
                 "   sex \\\n"
                 "   mutation_rate \\\n"
+                "   sex_change \\\n"
                 "   [ ngen ]\n");
         exit(0);
     }
@@ -648,9 +668,9 @@ int main(int argc, char *argv[])
 
     if(argc != 
 #if defined(STEPWISE)
-            8
-#else
             9
+#else
+            10
 #endif
       )
     {
@@ -670,9 +690,11 @@ int main(int argc, char *argv[])
     uint32 sex = (uint32)strtoul(argv[6],NULL,0);
     mutation_rate = strtod(argv[7],NULL);
     INVALID(mutation_rate < 0 || mutation_rate > 1,mutation_rate,argv[7]);
+    sex_change = (uint32)strtol(argv[8],NULL,0);
 #if !defined(STEPWISE)
-    uint32 ngen = (uint32)strtoul(argv[8],NULL,0);
+    uint32 ngen = (uint32)strtoul(argv[9],NULL,0);
 #endif
+
 
     /* Extra padding for sex bit */
     nwords = nloci/bitspword + 1;

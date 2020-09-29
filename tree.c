@@ -524,7 +524,7 @@ void widen_mutation_sites(void)
 
 void mutate(bitstr bs)
 {
-   uint32 i,j,oldwhere,where,remaining_sites = nloci;
+   uint32 i,j,remaining_sites = nloci;
 
    if(1. - mutation_rate == 1.)
        return;
@@ -550,19 +550,29 @@ with_bigger_table:
 #ifdef DIAG
        mutation_events++;
 #endif
-       where = gsl_rng_uniform_int(rng,remaining_sites--);
+       uint32 where = gsl_rng_uniform_int(rng,remaining_sites--);
+       uint32 oldwhere;
 
-
-       /* Loop until we get list with no repeats */
+       /* Loop until we get list with no repeats, and all 
+        * sites are selected with equal probability */
        do
        {
            oldwhere = where;
            for(j = 0 ; j < mutation_sites.len; j++)
            {
-               if(where == mutation_sites.where[j])
+               if(where >= mutation_sites.where[j])
+               {
                    where++;
+                   /* Mark as checked */
+                   mutation_sites.where[j] += nloci;
+               }
            }
        } while(oldwhere != where);
+
+       /* Unmark */
+       for(j = 0 ; j < mutation_sites.len; j++)
+           if(mutation_sites.where[j] >= nloci)
+               mutation_sites.where[j] -= nloci;
 
        assert(where < nloci);
        mutation_sites.where[mutation_sites.len++] = where;
@@ -576,7 +586,7 @@ with_bigger_table:
    }
    for(i = 0 ; i < mutation_sites.len ; i++)
    {
-       where = mutation_sites.where[i];
+       uint32 where = mutation_sites.where[i];
        bs.bits[where/bitspword] ^= (1UL << (where % bitspword));
    }
 }

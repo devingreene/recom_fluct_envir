@@ -480,7 +480,7 @@ void make_children(uint64 *scratch1)
     }
 }
 
-inline double env_envelope(double x)
+static inline double env_envelope(double x)
 {
     if(x > nloci || x < 0)
         return 0;
@@ -569,7 +569,7 @@ void widen_mutation_sites(void)
 
 void mutate(bitstr bs)
 {
-   uint32 i,j,where,remaining_sites = nloci;
+   uint32 i,j,oldwhere,where,remaining_sites = nloci;
 
    if(1. - mutation_rate == 1.)
        return;
@@ -597,11 +597,18 @@ with_bigger_table:
 #endif
        where = gsl_rng_uniform_int(rng,remaining_sites--);
 
-       for(j = 0 ; j < mutation_sites.len; j++)
+
+       /* Loop until we get list with no repeats */
+       do
        {
-           if(where == j)
-               where++;
-       }
+           oldwhere = where;
+           for(j = 0 ; j < mutation_sites.len; j++)
+           {
+               if(where == mutation_sites.where[j])
+                   where++;
+           }
+       } while(oldwhere != where);
+
        assert(where < nloci);
        mutation_sites.where[mutation_sites.len++] = where;
        if(mutation_sites.space < nloci && mutation_sites.len >= mutation_sites.space)
@@ -614,7 +621,7 @@ with_bigger_table:
    }
    for(i = 0 ; i < mutation_sites.len ; i++)
    {
-       int where = mutation_sites.where[i];
+       where = mutation_sites.where[i];
        bs.bits[where/bitspword] ^= (1UL << (where % bitspword));
    }
 }

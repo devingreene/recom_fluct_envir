@@ -1,8 +1,11 @@
 #!/bin/bash
 
-if [ "$1" = --dump ]
-then  
-    ./parserun.py < input_file.txt
-else
-    ./parserun.py < input_file.txt | ./parse_results_plot.py
-fi
+for arg
+do
+    if [ "$arg" = --dump ]
+    then  
+        ./parserun.py $@ < input_file.txt
+        exit 0
+    fi
+done
+./parserun.py $@ < input_file.txt | ./parse_results_plot.py $@

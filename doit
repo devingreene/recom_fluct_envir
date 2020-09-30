@@ -8,5 +8,4 @@ do
         exit 0
     fi
 done
-
-./parserun.py $@ < input_file.txt | ./parse_results_plot.py
+./parserun.py $@ < input_file.txt | ./parse_results_plot.py $@

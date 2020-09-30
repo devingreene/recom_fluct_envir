@@ -40,10 +40,8 @@ except StopIteration:
     print("Too many lines in config file",file=sys.stderr)
     sys.exit(1)
 
-import getopt
-
 m = '0'
-if ('-m','') in getopt.gnu_getopt(sys.argv[1:],'m',['dump'])[0]:
+if "-m" in sys.argv[1:]:
     m = '1'
 
 import subprocess

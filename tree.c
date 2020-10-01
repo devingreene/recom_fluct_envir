@@ -690,7 +690,7 @@ int main(int argc, char *argv[])
     uint32 sex = (uint32)strtoul(argv[6],NULL,0);
     mutation_rate = strtod(argv[7],NULL);
     INVALID(mutation_rate < 0 || mutation_rate > 1,mutation_rate,argv[7]);
-    sex_change = (uint32)strtol(argv[8],NULL,0);
+    sex_change = !!strtol(argv[8],NULL,0);
 #if !defined(STEPWISE)
     uint32 ngen = (uint32)strtoul(argv[9],NULL,0);
 #endif

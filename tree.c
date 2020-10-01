@@ -69,6 +69,7 @@ uint32 weight(uint64 *bits)
     for(i = 0; i < nwords - 1; i++)
         for(s=bits[i];s;s >>= 1)
             res += s&1;
+    /* Don't count the sex bit */
     for(i=0,s=bits[nwords-1];s && i < residual ;s >>= 1,i++)
         res += s&1;
     return res;
@@ -77,6 +78,7 @@ uint32 weight(uint64 *bits)
 int cmp(bitstr b1, bitstr b2)
 {
     int i;
+    /* Bitstrings are ordered word-wise little endian */
     for(i = nwords - 1 ; i >= 0 ; i--)
     {
         if(b1.bits[i] == b2.bits[i])
@@ -105,6 +107,8 @@ struct node
 {
     bitstr bs;
     uint32 n;
+    /* Nodes are either in the cache or in the tree,
+     * never both, so unionize */
     union
     {
         struct node *left;
@@ -163,6 +167,8 @@ void putnode(struct node *n)
 }
 
 /* Node and tree methods */
+
+/* bitstring weights are computed always and only here */
 struct node *getnode(bitstr bs)
 {
     struct node *n;
@@ -309,6 +315,8 @@ struct arrays
 } thearray;
 
 /* Array methods */
+
+/* TODO Change array to parent_array? */
 void initialize_array(void)
 {
     thearray.bs = malloc(sizeof(*thearray.bs)*0x1000);
@@ -464,7 +472,9 @@ void make_children(uint64 *scratch1)
         {
             uint64 *dad = thearray.bs[k].bits;
             uint64 *mom = thearray.bs[gsl_ran_discrete(rng,tl_sex)+found_sex].bits;
+            /* Where are Dad and Mom different? */
             xor(dad,mom,scratch1);
+            /* Where do we get Mom's genes? */
             for(j=0;j<nwords;j++)
             {
                 /* gsl_rng_mt19937 delivers only 32 bits per call */
@@ -609,6 +619,13 @@ with_bigger_table:
 
        /* Loop until we get list with no repeats, and all 
         * sites are selected with equal probability */
+
+       /* remaining_sites < nloci1 means that we index over *remaining* 
+        * sites.  This means, for example, if nloci1 = 8 and we have 6,5,3 in
+        * mutations_sites.where so far, then if we choose index 4, 
+        * then this should correspond to site 7.  The following nested loop 
+        * insures that this happens and we have equal probabilities for remaining
+        * sites */
        do
        {
            oldwhere = where;

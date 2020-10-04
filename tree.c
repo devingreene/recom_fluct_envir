@@ -14,6 +14,8 @@
 #include<gsl/gsl_rng.h>
 #include<gsl/gsl_randist.h>
 
+#include "this.h"
+
 #define bitspword (8*sizeof(uint64))
 #define INVALID(cond,name,arg) \
     if((cond)) \
@@ -22,9 +24,6 @@
         exit(1); \
     }
 #define ENVELOPE_DEGREE (6)
-
-typedef unsigned long uint64;
-typedef unsigned int uint32;
 
 typedef struct _bitstr
 {
@@ -38,7 +37,8 @@ uint32 nloci;
 double discount;
 double shift_rate;
 double shift_size;
-double mutation_rate;
+double *mutation_rate;
+double *mutation_contrib;
 uint32 sex_change;
 
 uint32 nindiv;
@@ -517,6 +517,13 @@ void pick_new_env(void)
 }
 
 /* Mutation data structures */
+
+void alloc_mutation_params(void)
+{
+    mutation_rates = malloc(sizeof(double)*nalleles*nalleles);
+    mutation_contrib = malloc(sizeof(double)*nalleles);
+}
+
 struct _mutation_sites
 {
     uint32 *where;
@@ -685,9 +692,9 @@ int main(int argc, char *argv[])
 
     if(argc != 
 #if defined(STEPWISE)
-            9
-#else
             10
+#else
+            11
 #endif
       )
     {
@@ -696,26 +703,44 @@ int main(int argc, char *argv[])
     }
 
     nloci = (uint32)strtoul(argv[1],NULL,0);
-    INVALID((int)nloci <= 0,nloci,argv[1]);
-    shift_rate = strtod(argv[2],NULL);
+    INVALID(nloci == 0,nloci,argv[1]);
+
+    nalleles = (uint32)strtoul(argv[2],NULL,0);
+    INVALID(nalleles < 2,nalleles,argv[1]);
+
+    shift_rate = strtod(argv[3],NULL);
     INVALID(shift_rate < 0 || shift_rate > 1,shift_rate,argv[2]);
-    shift_size = strtod(argv[3],NULL);
+
+    shift_size = strtod(argv[4],NULL);
     INVALID(shift_size < 0,shift_size,argv[3]);
-    discount = strtod(argv[4],NULL);
+
+    discount = strtod(argv[5],NULL);
     INVALID(discount < 0 || discount > 1,discount,argv[4]);
-    uint32 nosex = (uint32)strtoul(argv[5],NULL,0);
-    uint32 sex = (uint32)strtoul(argv[6],NULL,0);
-    mutation_rate = strtod(argv[7],NULL);
-    INVALID(mutation_rate < 0 || mutation_rate > 1,mutation_rate,argv[7]);
-    sex_change = !!strtol(argv[8],NULL,0);
+
+    uint32 nosex = (uint32)strtoul(argv[6],NULL,0);
+    uint32 sex = (uint32)strtoul(argv[7],NULL,0);
+
+    alloc_mutation_params();
+
+    parse_rates(argv[8]);
+    parse_contrib(argv[9]);
+
+    sex_change = !!strtol(argv[10],NULL,0);
 #if !defined(STEPWISE)
-    uint32 ngen = (uint32)strtoul(argv[9],NULL,0);
+    uint32 ngen = (uint32)strtoul(argv[11],NULL,0);
 #endif
 
+    uint32 nbits = 0;
+    uint32 s = nalleles - 1;
+    while(s)
+    {
+        nbits++;
+        s >>= 1;
+    }
 
     /* Extra padding for sex bit */
-    nwords = nloci/bitspword + 1;
-    residual = nloci % bitspword;
+    nwords = nbits/bitspword + 1;
+    residual = nbits % bitspword;
 
     nindiv = nosex + sex;
     if( (int)nosex < 0 || (int)sex < 0 || nindiv == 0)

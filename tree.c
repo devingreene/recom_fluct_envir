@@ -18,14 +18,24 @@
 #include "this.h"
 
 #define bitspword (uint32)(8*sizeof(uint64))
-#define INVALID(cond,name,arg) \
+
+#define INVALID(cond,args,...) \
+{ \
+    if((cond)) \
+    { \
+        fprintf(stderr,args,##__VA_ARGS__); \
+        exit(1); \
+    } \
+}
+
+#define INVALID_ARG(cond,name,arg) \
     if((cond)) \
     { \
         fprintf(stderr,"Invalid value for " #name ": %s\n",arg); \
         exit(1); \
     }
 
-#ifdef DIAG
+#if defined(DIAG) || defined(STEPWISE)
 #define ASSERT_PRINT(stmt,bits) \
 { \
     assert((stmt) || !bitprint(bits,1)); \
@@ -217,8 +227,9 @@ struct node *getnode(bitstr bs)
     }
     memcpy(n->bs.bits,bs.bits,nwords*sizeof(uint64));
     n->bs.weight = weight(n->bs.bits);
-#ifdef DIAG
+#if defined(DIAG) || defined(STEPWISE)
     ASSERT_PRINT(n->bs.weight <= maximum_weight, n->bs.bits);
+    ASSERT_GOOD_GENOTYPE(n->bs.bits);
 #endif
     n->n = 1;
     n->left = n->right = NULL;
@@ -326,8 +337,7 @@ int bitprint(uint64 *bits,int nl)
         }
     }
     printf("|");
-    for(b = 0 ; b < bitspword - residual ; b++)
-        printf("%d",!!(word & (1UL << (bitspword - residual - b - 1))));
+    printf("%ld",word);
     if(nl) printf("\n");
     return 1;
 }
@@ -544,7 +554,7 @@ void make_children(uint64 *scratch1,uint32 *choices, uint32 choices_ints)
             /* We may have cleared sex bit, so reset it */
             set_sex_bit(res);
         }
-#ifdef DIAG
+#if defined(DIAG) || defined(STEPWISE)
         ASSERT_GOOD_GENOTYPE(res.bits);
 #endif
         mutate(res);
@@ -554,9 +564,9 @@ void make_children(uint64 *scratch1,uint32 *choices, uint32 choices_ints)
 
 static inline double env_envelope(double x)
 {
-    if(x > nloci || x < 0)
+    if(x > maximum_weight || x < 0)
         return 0;
-    x /= nloci/2.;
+    x /= maximum_weight/2.;
     x -= 1;
     return 1 - pow(x,ENVELOPE_DEGREE);
 }
@@ -566,6 +576,15 @@ void pick_new_env(void)
     double cand = env + gsl_ran_gaussian_ziggurat(rng,shift_size);
     double here = env_envelope(env);
     double there = env_envelope(cand);
+    if(here == 0)
+    {
+        if(there == 0)
+            env = gsl_rng_uniform(rng) < 0.5?env:cand;
+        else
+            env = cand;
+        return;
+    }
+        
     double chance = there/here;
     if(!isfinite(chance))
     {
@@ -625,11 +644,11 @@ void mutate(bitstr bs)
        set_sex_bit(bs);
 
    if(sex_change)
-   { assert(0);
+   { 
        bs.bits[nwords - 1]
            ^= (uint64)!!(gsl_rng_uniform(rng) < sex_mutation_rate) << residual;
    }
-#ifdef DIAG
+#if defined(DIAG) || defined(STEPWISE)
    ASSERT_GOOD_GENOTYPE(bs.bits);
 #endif
 }
@@ -672,19 +691,19 @@ int main(int argc, char *argv[])
     }
 
     nloci = (uint32)strtoul(argv[1],NULL,0);
-    INVALID(nloci == 0,nloci,argv[1]);
+    INVALID_ARG(nloci == 0,nloci,argv[1]);
 
     nalleles = (uint32)strtoul(argv[2],NULL,0);
-    INVALID(nalleles < 2,nalleles,argv[1]);
+    INVALID_ARG(nalleles < 2,nalleles,argv[1]);
 
     shift_rate = strtod(argv[3],NULL);
-    INVALID(shift_rate < 0 || shift_rate > 1,shift_rate,argv[2]);
+    INVALID_ARG(shift_rate < 0 || shift_rate > 1,shift_rate,argv[2]);
 
     shift_size = strtod(argv[4],NULL);
-    INVALID(shift_size < 0,shift_size,argv[3]);
+    INVALID_ARG(shift_size < 0,shift_size,argv[3]);
 
     discount = strtod(argv[5],NULL);
-    INVALID(discount < 0 || discount > 1,discount,argv[4]);
+    INVALID_ARG(discount < 0 || discount > 1,discount,argv[4]);
 
     uint32 nosex = (uint32)strtoul(argv[6],NULL,0);
     uint32 sex = (uint32)strtoul(argv[7],NULL,0);
@@ -720,11 +739,8 @@ int main(int argc, char *argv[])
     residual = (nloci*allele_size) % bitspword;
 
     nindiv = nosex + sex;
-    if( (int)nosex < 0 || (int)sex < 0 || nindiv == 0)
-    {
-        fprintf(stderr,"Invalid value for population size: nosex: %s, sex: %s\n",argv[4],argv[5]);
-        exit(1);
-    }
+    INVALID((int)nosex < 0 || (int)sex < 0 || nindiv == 0,
+            "Invalid value for population size: nosex: %s, sex: %s\n",argv[4],argv[5]);
 
     /* initialize structures */
     initialize_array();
@@ -736,7 +752,7 @@ int main(int argc, char *argv[])
     no_sex_weights = malloc((maximum_weight + 1)*sizeof(uint32));
     sex_weights = malloc((maximum_weight + 1)*sizeof(uint32));
 
-    env = nloci/2;
+    env = maximum_weight/2;
 
     bs.bits = malloc(sizeof(uint64)*nwords);
 #ifndef STEPWISE
@@ -761,7 +777,7 @@ int main(int argc, char *argv[])
         }
         if(i < sex)
             set_sex_bit(bs);
-#if DIAG
+#ifdef DIAG
         ASSERT_GOOD_GENOTYPE(bs.bits);
 #endif
         insert(bs);
@@ -777,19 +793,19 @@ int main(int argc, char *argv[])
 
         /* Print weights */
         printf("env: %8.2f\n",env);
-        printf("\n  no_sex:");
-        for(j = 0 ; j <= maximum_weight - minimum_weight ; j++)
-            printf(" %u:%u",j + minimum_weight,no_sex_weights[j]);
-        printf("\n   sex:");
-        for(j = 0 ; j <= maximum_weight - minimum_weight ; j++)
-            printf(" %u:%u",j + minimum_weight,sex_weights[j]);
+        printf("  no_sex:");
+        for(j = 0 ; j <= maximum_weight; j++)
+            printf(" %u:%u",j,no_sex_weights[j]);
+        printf("\n     sex:");
+        for(j = 0 ; j <= maximum_weight; j++)
+            printf(" %u:%u",j,sex_weights[j]);
 
         pick_new_env();
     }
     printf("\n");
     return 0;
 #elif defined(STEPWISE)
-    assert(nloci <= 63);
+    assert(nloci*allele_size <= 63);
     uint64 x;
     char line[1024];
     for(;;)
@@ -847,6 +863,8 @@ int main(int argc, char *argv[])
                 for(i=0;i<j;i++)
                     insert(bs);
             }
+            else
+                INVALID(1,"Invalid entry\n");
         }
                 
         dumptree();
@@ -854,12 +872,11 @@ int main(int argc, char *argv[])
         printf("    ncache.size = %ld\n",ncache.size);
 
     }
-#endif
-#ifdef DIAG
+#elif defined(DIAG)
     printf("Start\n");
-    dumptree();
     for(i=0;i<ngen;i++)
     {
+        dumptree();
         make_children(scratch,choices,choices_ints);
         dump_array();
         hwm_tree_size = (hwm_tree_size >= thetree.size)?hwm_tree_size:thetree.size;

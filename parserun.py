@@ -23,6 +23,7 @@ fd_pattern = key("fitness_discount") +to_float
 nl_pattern = key("number_of_loci") + to_int
 na_pattern = key("number_of_alleles") + to_int
 mr_pattern = (Literal("mutation_rate") + Optional(":")).setParseAction(lambda s,loc,toks: s[len(toks[0]):])
+mc_pattern = (Literal("mutation_contrib") + Optional(":")).setParseAction(lambda s,loc,toks: s[len(toks[0]):])
 smr_pattern = key("sex_mutation_rate") + to_float
 nai_pattern = key("number_of_asex_individuals") + to_int
 nit_pattern = key("number_of_iterations") + to_int
@@ -35,6 +36,7 @@ try:
     nl = nl_pattern.parseString(next(stdin),parseAll=True)[0]
     na = na_pattern.parseString(next(stdin),parseAll=True)[0]
     mr = mr_pattern.parseString(next(stdin))[0].strip()
+    mc = mc_pattern.parseString(next(stdin))[0].strip()
     smr = smr_pattern.parseString(next(stdin),parseAll=True)[0]
     nai = nai_pattern.parseString(next(stdin),parseAll=True)[0]
     nsi = nsi_pattern.parseString(next(stdin),parseAll=True)[0]
@@ -44,9 +46,6 @@ except StopIteration:
     print("Too many lines in config file",file=sys.stderr)
     sys.exit(1)
 
-print(mr)
-sys.exit(1)
-
 m = '0'
 if "-m" in sys.argv[1:]:
     m = '1'
@@ -54,12 +53,15 @@ if "-m" in sys.argv[1:]:
 import subprocess
 
 exec_args = ["./exec",str(nl),
+                      str(na),
                       str(sr),
                       str(ss),
                       str(fd),
                       str(nai),
                       str(nsi),
                       str(mr),
+                      str(mc),
+                      str(smr),
                       m,
                       str(nit)]
 
@@ -67,13 +69,9 @@ print(" ".join(exec_args),file=sys.stderr)
 res = subprocess.run(exec_args,stdout = subprocess.PIPE,
         stderr = subprocess.PIPE)
 
-rc = res.returncode
-if rc != 0:
-    sys.exit(rc)
-else:
-    sys.stdout.write(res.stdout.decode())
+sys.stdout.write(res.stdout.decode())
 
 err_msg = res.stderr.decode()
 if err_msg:
     print("Errors:",file=sys.stderr)
-    sys.stderr.write(err_msg)
+    sys.stderr.write("  "+err_msg)

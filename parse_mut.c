@@ -32,7 +32,6 @@
 #define ISLEFT(c) ( (c) == '(' || (c) == '[' )
 #define ISRIGHT(c) ( (c) == ')' || (c) == ']' )
 
-// #define extern
 extern double *mutation_rate;
 extern uint32 *mutation_contrib;
 extern uint32 nalleles;

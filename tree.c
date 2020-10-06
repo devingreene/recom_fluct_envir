@@ -3,6 +3,7 @@
 #include<string.h>
 #include<math.h>
 #include<assert.h>
+#include<limits.h>
 
 #if MACOSX
 #include<fcntl.h>
@@ -16,14 +17,38 @@
 
 #include "this.h"
 
-#define bitspword (8*sizeof(uint64))
+#define bitspword (uint32)(8*sizeof(uint64))
 #define INVALID(cond,name,arg) \
     if((cond)) \
     { \
         fprintf(stderr,"Invalid value for " #name ": %s\n",arg); \
         exit(1); \
     }
+
+#ifdef DIAG
+#define ASSERT_PRINT(stmt,bits) \
+{ \
+    assert((stmt) || !bitprint(bits,1)); \
+}
+
+#define ASSERT_GOOD_GENOTYPE(bits) \
+{ \
+    uint32 _i,_j; \
+    uint64 _word; \
+    for(_i = 0 ; _i < nwords ; _i++) \
+    { \
+        _word = (bits)[_i]; \
+        for(_j = 0 ; _j < (_i == nwords - 1?residual:bitspword); _j += allele_size, _word >>= allele_size) \
+        ASSERT_PRINT( (_word & allele_mask) < nalleles,bits); \
+    } \
+    ASSERT_PRINT(_word <= 1,bits); \
+} 
+#endif
+
 #define ENVELOPE_DEGREE (6)
+
+extern void parse_rates(char *s);
+extern void parse_contrib(char *s);
 
 typedef struct _bitstr
 {
@@ -38,12 +63,19 @@ double discount;
 double shift_rate;
 double shift_size;
 double *mutation_rate;
-double *mutation_contrib;
+uint32 *mutation_contrib;
+gsl_ran_discrete_t **mutant_tables;
+double sex_mutation_rate;
 uint32 sex_change;
 
 uint32 nindiv;
 uint32 nwords;
 uint32 residual;
+uint32 nalleles;
+uint32 allele_size;
+uint64 allele_mask;
+
+uint32 maximum_weight;
 double env;
 
 /* Global for location of sexuals */
@@ -52,26 +84,23 @@ int found_sex = -1;
 /* High water marks */
 #ifdef DIAG
 uint32 hwm_cache;
-uint32 hwm_mutation_sites_space;
-uint32 hwm_power_table_len;
 uint64 mutation_events;
+uint32 hwm_tree_size;
 uint32 hwm_tree_depth;
 #endif
 
 /* Forward declarations */
 void mutate(bitstr bs);
+int bitprint(uint64 *bits,int nl);
 
 /* Bitstring operations */
 uint32 weight(uint64 *bits)
 {
-    uint32 i,res = 0;
-    uint64 s = 0;
-    for(i = 0; i < nwords - 1; i++)
-        for(s=bits[i];s;s >>= 1)
-            res += s&1;
-    /* Don't count the sex bit */
-    for(i=0,s=bits[nwords-1];s && i < residual ;s >>= 1,i++)
-        res += s&1;
+    uint32 i,j,res = 0;
+    uint64 s;
+    for(i = 0; i < nwords; i++)
+        for(j = 0, s = bits[i]; j < (i == nwords - 1?residual:bitspword); j += allele_size, s >>= allele_size)
+            res += mutation_contrib[s & allele_mask];
     return res;
 }
 
@@ -188,6 +217,9 @@ struct node *getnode(bitstr bs)
     }
     memcpy(n->bs.bits,bs.bits,nwords*sizeof(uint64));
     n->bs.weight = weight(n->bs.bits);
+#ifdef DIAG
+    ASSERT_PRINT(n->bs.weight <= maximum_weight, n->bs.bits);
+#endif
     n->n = 1;
     n->left = n->right = NULL;
     return n;
@@ -278,15 +310,34 @@ void delete(bitstr bs)
 
 #if defined(STEPWISE) || defined(DIAG)
 /* Printing methods */
-void printbf(struct node *node)
+int bitprint(uint64 *bits,int nl)
 {
-    uint32 i;
-    uint64 *bits = node->bs.bits;
+    uint32 i,j,b;
+    uint64 word;
+
+    for(i = 0; i < nwords ; i++)
+    {
+        word = bits[i];
+        for(j = 0 ; j < (i == nwords - 1?residual:bitspword) ; j += allele_size , word >>= allele_size)
+        {
+            j>0?printf("|"):0;
+            for(b=0 ; b < allele_size ; b++)
+                printf("%d",!!(word & ( 1UL << (allele_size - b - 1))));
+        }
+    }
+    printf("|");
+    for(b = 0 ; b < bitspword - residual ; b++)
+        printf("%d",!!(word & (1UL << (bitspword - residual - b - 1))));
+    if(nl) printf("\n");
+    return 1;
+}
+
+int printbf(struct node *node)
+{
     int n = node->n;
-    int weight = node->bs.weight;
-    for(i = 0 ; i < nwords ; i++)
-        printf("%016lx",bits[i]);
-    printf(": %05d %05d\n",n,weight);
+    uint32 weight = node->bs.weight;
+    bitprint(node->bs.bits,0);
+    return printf(": %05u %05u\n",n,weight);
 }
 
 void partialdump(struct node *n)
@@ -346,7 +397,6 @@ void increase_array_space(void)
 
 void append_array(struct node* n)
 {
-
     if(thearray.len > (7*thearray.space)/8)
         increase_array_space();
 
@@ -366,11 +416,10 @@ void append_array(struct node* n)
 void dump_array(void)
 {
     printf("Array:\n");
-    uint32 i,j;
+    uint32 i;
     for(i = 0 ; i < thearray.len && (!i || printf("\n")) ; i++)
     {
-        for(j = 0 ; j < nwords ; j++)
-            printf("%016lx",thearray.bs[i].bits[j]);
+        bitprint(thearray.bs[i].bits,0);
         printf(": %6.6f",thearray.w[i]);
     }
     printf("\n");
@@ -388,7 +437,8 @@ void plinearize_and_tally_weights(struct node **pcursor)
     {
         plinearize_and_tally_weights(&cursor->left);
         *pcursor = cursor->right;
-        if(found_sex < 0 && check_sex_bit(cursor->bs))
+        int sex_bit = check_sex_bit(cursor->bs);
+        if(found_sex < 0 && sex_bit)
             found_sex = thearray.len;
         append_array(cursor);
         if(found_sex >= 0)
@@ -397,9 +447,8 @@ void plinearize_and_tally_weights(struct node **pcursor)
             no_sex_weights[cursor->bs.weight] += cursor->n ;
         putnode(cursor);
 #ifdef DIAG
-        int sex_bit = check_sex_bit(cursor->bs);
         assert(( found_sex >= 0 && sex_bit ) ||
-                ( found_sex < 0 && !sex_bit ) );
+                ( found_sex < 0 && !sex_bit ) || !printf("%d %d\n",found_sex,sex_bit));
 #endif
     }
 }
@@ -408,8 +457,8 @@ void linearize_and_tally_weights(void)
 {
     thearray.len = 0;
     found_sex = -1;
-    memset(no_sex_weights,0,(nloci+1)*sizeof(uint32));
-    memset(sex_weights,0,(nloci+1)*sizeof(uint32));
+    memset(no_sex_weights,0,(maximum_weight + 1)*sizeof(int));
+    memset(sex_weights,0,(maximum_weight + 1)*sizeof(int));
 #if defined(STEPWISE) || defined(DIAG)
     thetree.size = 0;
 #endif
@@ -448,7 +497,7 @@ void initialize_rng(void)
     gsl_rng_set(rng,seed);
 }
 
-void make_children(uint64 *scratch1)
+void make_children(uint64 *scratch1,uint32 *choices, uint32 choices_ints)
 {
     uint32 i,j;
     bitstr res;
@@ -470,22 +519,34 @@ void make_children(uint64 *scratch1)
         }
         else
         {
+            memset(scratch1,0,sizeof(uint64)*nwords);
+            for(j = 0 ; j < choices_ints; j++)
+                choices[j] = gsl_rng_get(rng);
+
             uint64 *dad = thearray.bs[k].bits;
             uint64 *mom = thearray.bs[gsl_ran_discrete(rng,tl_sex)+found_sex].bits;
-            /* Where are Dad and Mom different? */
-            xor(dad,mom,scratch1);
-            /* Where do we get Mom's genes? */
-            for(j=0;j<nwords;j++)
+            uint64 *choice;
+            uint64 allele;
+
+            for(j =  0; j < nloci ; j++)
             {
-                /* gsl_rng_mt19937 delivers only 32 bits per call */
-                scratch1[j] &= ~gsl_rng_get(rng);
-                scratch1[j] &= ~(gsl_rng_get(rng) << 32);
+                if(choices[j/(8*sizeof(uint32))] & (1 << ( j % (8*sizeof(uint32)))))
+                    choice = mom;
+                else 
+                    choice = dad;
+                allele = choice[(j*allele_size)/bitspword] >> (j*allele_size) % bitspword;
+                allele &= allele_mask;
+                scratch1[(j*allele_size)/bitspword]
+                    ^= allele << ((j*allele_size) % bitspword);
             }
-            xor_me(scratch1,dad);
+
             res.bits = scratch1;
             /* We may have cleared sex bit, so reset it */
             set_sex_bit(res);
         }
+#ifdef DIAG
+        ASSERT_GOOD_GENOTYPE(res.bits);
+#endif
         mutate(res);
         insert(res);
     }
@@ -518,156 +579,61 @@ void pick_new_env(void)
 
 /* Mutation data structures */
 
-void alloc_mutation_params(void)
+void initialize_mutation_parameters(char *argv[])
 {
-    mutation_rates = malloc(sizeof(double)*nalleles*nalleles);
-    mutation_contrib = malloc(sizeof(double)*nalleles);
-}
+    mutation_rate = malloc(sizeof(double)*nalleles*nalleles);
+    parse_rates(argv[8]);
 
-struct _mutation_sites
-{
-    uint32 *where;
-    uint32 len;
-    uint32 space;
-} mutation_sites;
+    mutation_contrib = malloc(sizeof(uint32)*nalleles);
+    parse_contrib(argv[9]);
 
-struct _power_table
-{
-    double *table;
-    uint32 len;
-} power_table;
-
-void initialize_mutation_sites(void)
-{
-    mutation_sites.where = malloc(sizeof(uint32)*8);
-    mutation_sites.len = 0;
-    mutation_sites.space = 8;
-#ifdef DIAG
-    hwm_mutation_sites_space = mutation_sites.space;
-#endif
-}
-
-void initialize_power_table(void)
-{
-    uint32 nloci1 = nloci + sex_change;
-    power_table.table = malloc(sizeof(double)*8);
-    power_table.len = 8;
-    int i;
-    for(i = 0 ; i < 8 ; i++)
-        power_table.table[i] = pow(1 - mutation_rate,nloci1-i);
-#ifdef DIAG
-    hwm_power_table_len = 8;
-#endif
-}
-
-void extend_power_table(void)
-{
-    uint32 nloci1 = nloci + sex_change;
-    power_table.table = realloc(power_table.table,sizeof(double)*(power_table.len+8));
+    mutant_tables = malloc(sizeof(*mutant_tables)*nalleles);
     uint32 i;
-    for(i = 0 ; i < 8 && i + power_table.len < nloci1 ; i++)
-        power_table.table[i+power_table.len] = pow(1 - mutation_rate,nloci1-i-power_table.len);
-    power_table.len += 8;
-    if(power_table.len >= nloci1)
-        power_table.len = nloci1;
-#ifdef DIAG
-    hwm_power_table_len = power_table.len;
-#endif
-}
+    for(i = 0 ; i < nalleles ; i++)
+        mutant_tables[i] = gsl_ran_discrete_preproc(nalleles,
+                mutation_rate + i*nalleles);
 
-void widen_mutation_sites(void)
-{
-    uint32 nloci1 = nloci + sex_change;
-    mutation_sites.where = 
-        realloc(mutation_sites.where,sizeof(int)*(mutation_sites.space+8));
-    mutation_sites.space += 8;
-    if(mutation_sites.space > nloci1)
-        mutation_sites.space = nloci1;
-#ifdef DIAG
-    hwm_mutation_sites_space = mutation_sites.space;
-#endif
+    uint32 max = 0; 
+    for(i = 0 ; i < nalleles ; i++)
+        max = mutation_contrib[i] > max?mutation_contrib[i]:max;
+    maximum_weight = max*nloci;
 }
 
 void mutate(bitstr bs)
 {
    uint32 i,j;
-   /* If sex_bit can mutate */
-   uint32 nloci1 = nloci + sex_change;
+   uint64 new,scratch,scratch2;
 
-   if(1. - mutation_rate == 1.)
-       return;
-
-   /* Mutate every god damn one */
-   if(mutation_rate == 1.)
+   int sex_bit = check_sex_bit(bs);
+   for(i = 0 ; i < nwords ; i++)
    {
-        for(i = 0 ; i < nwords - 1 ; i++)
-            bs.bits[i] ^= ~0UL;
-        bs.bits[nwords - 1] ^= (1UL << residual) - 1;
-        if(sex_change)
-            bs.bits[nwords - 1] ^= 1UL << residual;
-#ifdef DIAG
-        mutation_events += nloci1;
-#endif
-        return;
-   }
-
-   uint32 remaining_sites = nloci1;
-   mutation_sites.len = 0;
-   for(i = 0 ;i < power_table.len ; i++)
-   {
-with_bigger_table:
-       if(gsl_rng_uniform(rng) < power_table.table[i])
-           break;
-#ifdef DIAG
-       mutation_events++;
-#endif
-       uint32 where = gsl_rng_uniform_int(rng,remaining_sites--);
-       uint32 oldwhere;
-
-       /* Loop until we get list with no repeats, and all 
-        * sites are selected with equal probability */
-
-       /* remaining_sites < nloci1 means that we index over *remaining* 
-        * sites.  This means, for example, if nloci1 = 8 and we have 6,5,3 in
-        * mutations_sites.where so far, then if we choose index 4, 
-        * then this should correspond to site 7.  The following nested loop 
-        * insures that this happens and we have equal probabilities for remaining
-        * sites */
-       do
+       scratch = bs.bits[i];
+       new = 0;
+       for(j = 0; j < (i==nwords - 1?residual:bitspword); j += allele_size,scratch >>= allele_size)
        {
-           oldwhere = where;
-           for(j = 0 ; j < mutation_sites.len; j++)
-           {
-               if(where >= mutation_sites.where[j])
-               {
-                   where++;
-                   /* Mark as checked */
-                   mutation_sites.where[j] += nloci1;
-               }
-           }
-       } while(oldwhere != where);
+           scratch2 = gsl_ran_discrete(rng,mutant_tables[scratch & allele_mask]);
+#if DIAG
+           if((scratch & allele_mask) != scratch2)
+               mutation_events++;
+#endif
+           new ^= scratch2 << j;
+       }
+       bs.bits[i] = new;
+   }
 
-       /* Unmark */
-       for(j = 0 ; j < mutation_sites.len; j++)
-           if(mutation_sites.where[j] >= nloci1)
-               mutation_sites.where[j] -= nloci1;
+   if(sex_bit)
+       set_sex_bit(bs);
 
-       assert(where < nloci1);
-       mutation_sites.where[mutation_sites.len++] = where;
-       if(mutation_sites.space < nloci1 && mutation_sites.len >= mutation_sites.space)
-           widen_mutation_sites();
+   if(sex_change)
+   { assert(0);
+       bs.bits[nwords - 1]
+           ^= (uint64)!!(gsl_rng_uniform(rng) < sex_mutation_rate) << residual;
    }
-   if(i == power_table.len && i < nloci1)
-   {
-       extend_power_table();
-       goto with_bigger_table;
-   }
-   for(i = 0 ; i < mutation_sites.len ; i++)
-   {
-       uint32 where = mutation_sites.where[i];
-       bs.bits[where/bitspword] ^= (1UL << (where % bitspword));
-   }
+#ifdef DIAG
+   ASSERT_GOOD_GENOTYPE(bs.bits);
+#endif
 }
+
 
 int main(int argc, char *argv[])
 {
@@ -676,12 +642,15 @@ int main(int argc, char *argv[])
         fprintf(stderr,
                 "./exec \\\n"
                 "   nloci \\\n"
+                "   nalleles \\\n"
                 "   shift_rate \\\n"
                 "   shift_size \\\n"
                 "   discount \\\n"
                 "   nosex \\\n"
                 "   sex \\\n"
                 "   mutation_rate \\\n"
+                "   mutation_contrib \\\n"
+                "   sex_mutation_rate \\\n"
                 "   sex_change \\\n"
                 "   [ ngen ]\n");
         exit(0);
@@ -692,9 +661,9 @@ int main(int argc, char *argv[])
 
     if(argc != 
 #if defined(STEPWISE)
-            10
+            12
 #else
-            11
+            13
 #endif
       )
     {
@@ -720,27 +689,35 @@ int main(int argc, char *argv[])
     uint32 nosex = (uint32)strtoul(argv[6],NULL,0);
     uint32 sex = (uint32)strtoul(argv[7],NULL,0);
 
-    alloc_mutation_params();
+    initialize_mutation_parameters(argv);
 
-    parse_rates(argv[8]);
-    parse_contrib(argv[9]);
+    sex_mutation_rate = strtod(argv[10],NULL);
 
-    sex_change = !!strtol(argv[10],NULL,0);
+    sex_change = !!strtol(argv[11],NULL,0);
+
 #if !defined(STEPWISE)
-    uint32 ngen = (uint32)strtoul(argv[11],NULL,0);
+    uint32 ngen = (uint32)strtoul(argv[12],NULL,0);
 #endif
 
-    uint32 nbits = 0;
+    allele_size = 0;
     uint32 s = nalleles - 1;
-    while(s)
+    while(s || (8*sizeof(uint64)) % allele_size)
     {
-        nbits++;
+        allele_size++;
         s >>= 1;
     }
 
+    if(allele_size > 8*sizeof(uint64))
+    {
+        fprintf(stderr,"Too many alleles\n");
+        exit(1);
+    }
+
+    allele_mask = (1UL << allele_size) - 1;
+
     /* Extra padding for sex bit */
-    nwords = nbits/bitspword + 1;
-    residual = nbits % bitspword;
+    nwords = (nloci*allele_size/bitspword) + 1;
+    residual = (nloci*allele_size) % bitspword;
 
     nindiv = nosex + sex;
     if( (int)nosex < 0 || (int)sex < 0 || nindiv == 0)
@@ -751,40 +728,61 @@ int main(int argc, char *argv[])
 
     /* initialize structures */
     initialize_array();
-    initialize_power_table();
-    initialize_mutation_sites();
+
     uint64 *scratch = malloc(sizeof(uint64)*nwords);
-    no_sex_weights = malloc((nloci+1)*sizeof(int));
-    sex_weights = malloc((nloci+1)*sizeof(int));
+    uint32 *choices = malloc(sizeof(uint32)*((nloci + 8*sizeof(uint32) - 1)/(8*sizeof(uint32))));
+    uint32 choices_ints = (nloci + 8*sizeof(uint32) - 1)/(8*sizeof(uint32));
+
+    no_sex_weights = malloc((maximum_weight + 1)*sizeof(uint32));
+    sex_weights = malloc((maximum_weight + 1)*sizeof(uint32));
 
     env = nloci/2;
 
     bs.bits = malloc(sizeof(uint64)*nwords);
-#if !defined(STEPWISE) && !defined(DIAG)
+#ifndef STEPWISE
     /* Initialize a population randomly */
-    uint32 i,j;
+    uint32 i,j,k;
+    size_t rand;
+    double *uniform = malloc(sizeof(double)*nalleles);
+    for(i = 0 ; i < nalleles ; i++)
+        uniform[i] = 1.;
+    gsl_ran_discrete_t *table = gsl_ran_discrete_preproc(nalleles,uniform);
+
     for(i = 0; i < nindiv ; i++)
     {
+        memset(bs.bits,0,sizeof(uint64)*nwords);
         for(j = 0 ; j < nwords ; j++)
-            bs.bits[j] = gsl_rng_get(rng) + ( gsl_rng_get(rng) << 32 );
-        bs.bits[nwords-1] &= (1UL << residual) - 1;
+        {
+            for(k = 0; k < (j == nwords - 1?residual:bitspword); k += allele_size)
+            {
+                rand = gsl_ran_discrete(rng,table);
+                bs.bits[j] ^= rand << k;
+            }
+        }
         if(i < sex)
             set_sex_bit(bs);
+#if DIAG
+        ASSERT_GOOD_GENOTYPE(bs.bits);
+#endif
         insert(bs);
     }
-
+    gsl_ran_discrete_free(table);
+    free(uniform);
+    free(bs.bits);
+#endif
+#if !defined(DIAG) && !defined(STEPWISE)
     for(i = 0 ; i < ngen && (!i || printf("\n")); i++)
     {
-        make_children(scratch);
+        make_children(scratch,choices,choices_ints);
 
         /* Print weights */
         printf("env: %8.2f\n",env);
-        printf("no_sex: 0:%u",no_sex_weights[0]);
-        for(j = 1 ; j < nloci + 1 ; j++)
-            printf(" %u:%u",j,no_sex_weights[j]);
-        printf("\n   sex: 0:%u",sex_weights[0]);
-        for(j = 1 ; j < nloci + 1 ; j++)
-            printf(" %u:%u",j,sex_weights[j]);
+        printf("\n  no_sex:");
+        for(j = 0 ; j <= maximum_weight - minimum_weight ; j++)
+            printf(" %u:%u",j + minimum_weight,no_sex_weights[j]);
+        printf("\n   sex:");
+        for(j = 0 ; j <= maximum_weight - minimum_weight ; j++)
+            printf(" %u:%u",j + minimum_weight,sex_weights[j]);
 
         pick_new_env();
     }
@@ -793,15 +791,15 @@ int main(int argc, char *argv[])
 #elif defined(STEPWISE)
     assert(nloci <= 63);
     uint64 x;
-    char s[1024];
+    char line[1024];
     for(;;)
     {
-        if(fgets(s,1024,stdin) == NULL)
+        if(fgets(line,1024,stdin) == NULL)
             break;
-        if(s[0] == '\n') { dumptree(); continue;}
-        if(s[1] == '\n')
+        if(line[0] == '\n') { dumptree(); continue;}
+        if(line[1] == '\n')
         {
-            if(s[0] == 'd')
+            if(line[0] == 'd')
             {
                 dumptree();
                 linearize_and_tally_weights();
@@ -817,9 +815,9 @@ int main(int argc, char *argv[])
                 }
                 printf("\n");
             }
-            if(s[0] == 'c')
+            if(line[0] == 'c')
             {
-                make_children(scratch);
+                make_children(scratch,choices, choices_ints);
                 dump_array();
                 printf("Found sex?: %d\n",found_sex);
                 dumptree();
@@ -829,7 +827,7 @@ int main(int argc, char *argv[])
         }
 
         char *endptr;
-        x = strtoul(s,&endptr,0);
+        x = strtoul(line,&endptr,2);
         bs.bits = &x;
 
         if(endptr)
@@ -856,34 +854,22 @@ int main(int argc, char *argv[])
         printf("    ncache.size = %ld\n",ncache.size);
 
     }
-#elif defined(DIAG)
-    uint32 i,j,hwm_treesize = 0;
-    for(i=0;i<nindiv;i++)
-    {
-        for(j=0;j<nwords;j++)
-            bs.bits[j] = gsl_rng_get(rng) + (gsl_rng_get(rng) << 32);
-        bs.bits[nwords-1] &= (1UL << residual) - 1;
-        if(i < sex)
-            set_sex_bit(bs);
-        insert(bs);
-    }
-
+#endif
+#ifdef DIAG
     printf("Start\n");
     dumptree();
     for(i=0;i<ngen;i++)
     {
-        make_children(scratch);
+        make_children(scratch,choices,choices_ints);
         dump_array();
-        hwm_treesize = (hwm_treesize >= thetree.size)?hwm_treesize:thetree.size;
+        hwm_tree_size = (hwm_tree_size >= thetree.size)?hwm_tree_size:thetree.size;
     }
 
     printf("End\n");
     dumptree();
-    printf("High water mark tree_size: %u\n",hwm_treesize);
+    printf("High water mark tree_size: %u\n",hwm_tree_size);
     printf("High water mark tree depth: %u\n",hwm_tree_depth);
     printf("High water mark cache_size: %u\n",hwm_cache);
-    printf("High water mark power_table.len: %u\n",hwm_power_table_len);
-    printf("High water mark mutation_sites.space: %u\n",hwm_mutation_sites_space);
     printf("Mutation events: %lu\n",mutation_events);
     return 0;
 #endif

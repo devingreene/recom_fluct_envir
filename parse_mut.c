@@ -2,6 +2,7 @@
 #include<stdio.h>
 #include<ctype.h>
 #include<math.h>
+#include<limits.h>
 #include "this.h"
 
 #define PARSE_ERROR(fmt,...)  \
@@ -20,13 +21,20 @@
     PARSE_ERROR(fmt,##__VA_ARGS__) \
 }
 
+#define INVALID(fmt,...) \
+{ \
+    fprintf(stderr,fmt,##__VA_ARGS__); \
+    exit(1); \
+}
+
+
 #define ISDELIM(c) ( (c) == ')' || (c) == '(' || (c) == '[' || (c) == ']' )
 #define ISLEFT(c) ( (c) == '(' || (c) == '[' )
 #define ISRIGHT(c) ( (c) == ')' || (c) == ']' )
 
-#define extern
+// #define extern
 extern double *mutation_rate;
-extern double *mutation_contrib;
+extern uint32 *mutation_contrib;
 extern uint32 nalleles;
 
 void parse_rates(char *s)
@@ -42,8 +50,8 @@ void parse_rates(char *s)
         {
             for(j = 0; j < nalleles ; j++)
                 if(i != j)
-                    mutation_rate[INDEX(i,j)] = rate;
-            mutation_rate[INDEX(i,i)] = 1 - (nalleles - 1)*rate;
+                    mutation_rate[INDEX(i,j)] = rate/(nalleles - 1);
+            mutation_rate[INDEX(i,i)] = 1 - rate;
         }
         return;
     }
@@ -52,7 +60,6 @@ void parse_rates(char *s)
     int depth = 0;
     int row = -1;
     int col = -1;
-    int maxcol = -1;
     s2 = s;
 
     while(*s2)
@@ -63,7 +70,7 @@ void parse_rates(char *s)
             if(depth > 0)
                 GRAPH("%s\n","Too deep");
             depth++;
-            if(++row >= nalleles)
+            if(++row >= (int)nalleles)
                 GRAPH("%s\n","Too many rows");
             col++;
             s2++;
@@ -71,7 +78,7 @@ void parse_rates(char *s)
 
         else if(ISRIGHT(*s2))
         {
-            if(col < nalleles )
+            if(col < (int)nalleles )
                 GRAPH("%s\n","Not enough elements in set");
             if(depth == 0)
                 GRAPH("%s\n","Too shallow");
@@ -92,13 +99,13 @@ void parse_rates(char *s)
             if(!isspace(*s2) && !ISRIGHT(*s2))
                 GRAPH("%s\n","Unexpected character or end");
             col++;
-            if(col > nalleles)
+            if(col > (int)nalleles)
                 GRAPH("%s\n","Too many columns");
         }
     }
     if(depth > 0)
         GRAPH("%s\n","Unexpected end of string");
-    if(row < nalleles - 1)
+    if(row < (int)nalleles - 1)
         GRAPH("%s\n","Too few rows");
     /* Fill in the diagonal elements */
     uint32 i,j;
@@ -111,22 +118,28 @@ void parse_rates(char *s)
                 sum += mutation_rate[INDEX(i,j)];
         mutation_rate[INDEX(i,i)] = 1 - sum;
     }
+
+    for(i = 0 ; i < nalleles*nalleles ; i++)
+        if(mutation_rate[i] < 0)
+            INVALID("Inferred negative probability values\n");
 }
 
 void parse_contrib(char *s)
 {
-    int i;
+    uint32 i;
     for(i = 0 ; i < nalleles ; i++)
-        mutation_contrib[i] = NAN;
+        mutation_contrib[i] = UINT_MAX;
     if(*s == 0)
+    {
         if(nalleles > 2)
             PARSE_ERROR("Three or more alleles must have a fitness "
                     "contribution table\n")
         else
         {
-            mutation_contrib[0] = 0.;
-            mutation_contrib[1] = 1.;
+            mutation_contrib[0] = 0;
+            mutation_contrib[1] = 1;
         }
+    }
 
     char *s2 = s;
     uint32 depth = 0;
@@ -161,9 +174,9 @@ void parse_contrib(char *s)
                     GRAPH("%s\n","Unexpected character or end");
                 if(n >= nalleles)
                     GRAPH("No such allele\n");
-                if(!isnan(mutation_contrib[n]))
+                if(mutation_contrib[n] != UINT_MAX)
                     GRAPH("Illegal: %u already filled in\n",n);
-                mutation_contrib[n] = strtod(s2,&s2);
+                mutation_contrib[n] = strtol(s2,&s2,0);
                 if(!isspace(*s2) && !ISRIGHT(*s2))
                     GRAPH("%s\n","Unexpected character or end");
             }
@@ -172,10 +185,11 @@ void parse_contrib(char *s)
         }
     }
     for(i = 0 ; i < nalleles ; i++)
-        if(isnan(mutation_contrib[i]))
+        if(mutation_contrib[i] == UINT_MAX)
             PARSE_ERROR("Allele index %u not filled in\n",i);
 }
 
+/*
 int main(int argc, char *argv[])
 {
     if(argc != 4) { fprintf(stderr,"Fuck off\n");exit(1);}
@@ -195,3 +209,4 @@ int main(int argc, char *argv[])
         printf("%f ",mutation_contrib[i]);
     printf("\n");
 }
+*/

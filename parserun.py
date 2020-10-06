@@ -17,21 +17,25 @@ def key(s):
 
 to_int = pyparsing_common.integer
 to_float = pyparsing_common.fnumber
-mr_pattern = key("mutation_rate") + to_float
 sr_pattern = key("shift_rate") + to_float
 ss_pattern = key("shift_size") + to_float
 fd_pattern = key("fitness_discount") +to_float
 nl_pattern = key("number_of_loci") + to_int
+na_pattern = key("number_of_alleles") + to_int
+mr_pattern = (Literal("mutation_rate") + Optional(":")).setParseAction(lambda s,loc,toks: s[len(toks[0]):])
+smr_pattern = key("sex_mutation_rate") + to_float
 nai_pattern = key("number_of_asex_individuals") + to_int
 nit_pattern = key("number_of_iterations") + to_int
 nsi_pattern = key("number_of_sex_individuals") + to_int
 
 try:
-    mr = mr_pattern.parseString(next(stdin),parseAll=True)[0]
     sr = sr_pattern.parseString(next(stdin),parseAll=True)[0]
     ss = ss_pattern.parseString(next(stdin),parseAll=True)[0]
     fd = fd_pattern.parseString(next(stdin),parseAll=True)[0]
     nl = nl_pattern.parseString(next(stdin),parseAll=True)[0]
+    na = na_pattern.parseString(next(stdin),parseAll=True)[0]
+    mr = mr_pattern.parseString(next(stdin))[0].strip()
+    smr = smr_pattern.parseString(next(stdin),parseAll=True)[0]
     nai = nai_pattern.parseString(next(stdin),parseAll=True)[0]
     nsi = nsi_pattern.parseString(next(stdin),parseAll=True)[0]
     nit = nit_pattern.parseString(next(stdin))[0]
@@ -39,6 +43,9 @@ try:
 except StopIteration:
     print("Too many lines in config file",file=sys.stderr)
     sys.exit(1)
+
+print(mr)
+sys.exit(1)
 
 m = '0'
 if "-m" in sys.argv[1:]:

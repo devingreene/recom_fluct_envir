@@ -212,23 +212,3 @@ token:
         if(mutation_contrib[i] == UINT_MAX)
             PARSE_ERROR("Allele index %u not filled in\n",i);
 }
-
-int main(int argc, char *argv[])
-{
-    if(argc != 4) { fprintf(stderr,"Fuck off\n");exit(1);}
-    nalleles = strtol(argv[1],NULL,0);
-    mutation_rate = malloc(sizeof(double)*nalleles*nalleles);
-    parse_rates(argv[2]);
-    uint32 i,j;
-    for(i=0 ; i < nalleles && (!i || printf("\n")); i++)
-        for(j=0 ; j < nalleles ; j++)
-            printf("%f ",mutation_rate[INDEX(i,j)]);
-    printf("\n");
-
-    mutation_contrib = malloc(sizeof(double)*nalleles);
-    parse_contrib(argv[3]);
-    printf("\n");
-    for(i = 0 ; i < nalleles ; i++)
-        printf("%u ",mutation_contrib[i]);
-    printf("\n");
-}

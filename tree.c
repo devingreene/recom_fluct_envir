@@ -18,6 +18,7 @@
 #include "this.h"
 
 #define bitspword (uint32)(8*sizeof(uint64))
+#define bitspint  (uint32)(8*sizeof(uint32))
 
 #define INVALID(cond,args,...) \
 { \
@@ -35,6 +36,11 @@
         exit(1); \
     }
 
+#define FULLORPART(_i) \
+    ( \
+      (_i) == nwords - 1?residual:bitspword \
+    ) 
+
 #if defined(DIAG) || defined(STEPWISE)
 #define ASSERT_PRINT(stmt,bits) \
 { \
@@ -48,13 +54,12 @@
     for(_i = 0 ; _i < nwords ; _i++) \
     { \
         _word = (bits)[_i]; \
-        for(_j = 0 ; _j < (_i == nwords - 1?residual:bitspword); _j += allele_size, _word >>= allele_size) \
+        for(_j = 0 ; _j < FULLORPART(_i); _j += allele_size, _word >>= allele_size) \
         ASSERT_PRINT( (_word & allele_mask) < nalleles,bits); \
     } \
     ASSERT_PRINT(_word <= 1,bits); \
 } 
 #endif
-
 #define ENVELOPE_DEGREE (6)
 
 extern void parse_rates(char *s);
@@ -109,7 +114,7 @@ uint32 weight(uint64 *bits)
     uint32 i,j,res = 0;
     uint64 s;
     for(i = 0; i < nwords; i++)
-        for(j = 0, s = bits[i]; j < (i == nwords - 1?residual:bitspword); j += allele_size, s >>= allele_size)
+        for(j = 0, s = bits[i]; j < FULLORPART(i); j += allele_size, s >>= allele_size)
             res += mutation_contrib[s & allele_mask];
     return res;
 }
@@ -180,13 +185,13 @@ struct nodecache
     };
 #endif
 
-struct tree
+struct _tree
 {
     struct node *root;
 #if defined(STEPWISE) || defined(DIAG)
     size_t size;
 #endif
-} thetree = {NULL
+} tree = {NULL
 #if defined(STEPWISE) || defined(DIAG)
     ,0};
 #else
@@ -238,7 +243,7 @@ struct node *getnode(bitstr bs)
 
 void insert(bitstr bs) 
 {
-   struct node **pcursor = &thetree.root;
+   struct node **pcursor = &tree.root;
    struct node *cursor;
 #ifdef DIAG
    uint32 depth = 0;
@@ -265,7 +270,7 @@ void insert(bitstr bs)
 
    *pcursor = new;
 #if defined(DIAG) || defined(STEPWISE)
-   thetree.size++;
+   tree.size++;
 #ifdef DIAG
    hwm_tree_depth = 
        hwm_tree_depth >= depth?hwm_tree_depth:depth;
@@ -290,12 +295,12 @@ void remove_node(struct node **prev, struct node *child)
         *prev = child->right;
 
     putnode(child);
-    thetree.size--;
+    tree.size--;
 }
 
 void delete(bitstr bs)
 {
-    struct node **pcursor = &thetree.root;
+    struct node **pcursor = &tree.root;
     struct node *cursor;
 
     while((cursor = *pcursor))
@@ -329,7 +334,7 @@ int bitprint(uint64 *bits,int nl)
     for(i = 0; i < nwords ; i++)
     {
         word = bits[i];
-        for(j = 0 ; j < (i == nwords - 1?residual:bitspword) ; j += allele_size , word >>= allele_size)
+        for(j = 0 ; j < FULLORPART(i) ; j += allele_size , word >>= allele_size)
         {
             j>0?printf("|"):0;
             for(b=0 ; b < allele_size ; b++)
@@ -363,63 +368,63 @@ void partialdump(struct node *n)
 void dumptree(void)
 {
     printf("Tree: \n");
-    partialdump(thetree.root);
+    partialdump(tree.root);
 }
 #endif
 
-struct arrays
+struct _array
 {
     bitstr *bs;
     double *w;
     uint32 len;
     uint32 space;
-} thearray;
+} array;
 
 /* Array methods */
 
 /* TODO Change array to parent_array? */
 void initialize_array(void)
 {
-    thearray.bs = malloc(sizeof(*thearray.bs)*0x1000);
+    array.bs = malloc(sizeof(*array.bs)*0x1000);
     /* Bit strings in one call to malloc */
     uint64 *allbits = malloc(sizeof(uint64)*nwords*0x1000);
 
     int i;
     for(i=0;i<0x1000;i++,allbits += nwords)
-        thearray.bs[i].bits = allbits;
-    thearray.w    = malloc(sizeof(double)*0x1000);
-    thearray.len  = 0;
-    thearray.space = 0x1000;
+        array.bs[i].bits = allbits;
+    array.w    = malloc(sizeof(double)*0x1000);
+    array.len  = 0;
+    array.space = 0x1000;
 }
 
 void increase_array_space(void)
 {
-    thearray.bs = realloc(thearray.bs,sizeof(*thearray.bs)*thearray.space*2);
-    thearray.w = realloc(thearray.w,sizeof(double)*thearray.space*2);
+    array.bs = realloc(array.bs,sizeof(*array.bs)*array.space*2);
+    array.w = realloc(array.w,sizeof(double)*array.space*2);
 
-    uint64 *allbits = malloc(sizeof(uint64)*nwords*thearray.space);
+    uint64 *allbits = malloc(sizeof(uint64)*nwords*array.space);
     uint32 i;
-    for(i=thearray.space;i<2*thearray.space;i++,allbits += nwords)
-        thearray.bs[i].bits = allbits;
+    for(i=array.space;i<2*array.space;i++,allbits += nwords)
+        array.bs[i].bits = allbits;
 
-    thearray.space *= 2;
+    array.space *= 2;
 }
 
 void append_array(struct node* n)
 {
-    if(thearray.len > (7*thearray.space)/8)
+    if(array.len > (7*array.space)/8)
         increase_array_space();
 
-    memcpy(thearray.bs[thearray.len].bits,n->bs.bits,sizeof(uint64)*nwords);
+    memcpy(array.bs[array.len].bits,n->bs.bits,sizeof(uint64)*nwords);
     /* XXX */
     /* Necessary? */
-    thearray.bs[thearray.len].weight = n->bs.weight;
-    thearray.w[thearray.len] = pow(discount,fabs((int)n->bs.weight - env))*n->n;
+    array.bs[array.len].weight = n->bs.weight;
+    array.w[array.len] = pow(discount,fabs((int)n->bs.weight - env))*n->n;
     if(found_sex < 0) 
         /* Two-fold advantage */
-        thearray.w[thearray.len] *= 2;
-    thearray.len++;
-    assert(thearray.len <= nindiv);
+        array.w[array.len] *= 2;
+    array.len++;
+    assert(array.len <= nindiv);
 }
 
 #if defined(DIAG) || defined(STEPWISE)
@@ -427,10 +432,10 @@ void dump_array(void)
 {
     printf("Array:\n");
     uint32 i;
-    for(i = 0 ; i < thearray.len && (!i || printf("\n")) ; i++)
+    for(i = 0 ; i < array.len && (!i || printf("\n")) ; i++)
     {
-        bitprint(thearray.bs[i].bits,0);
-        printf(": %6.6f",thearray.w[i]);
+        bitprint(array.bs[i].bits,0);
+        printf(": %6.6f",array.w[i]);
     }
     printf("\n");
 }
@@ -449,7 +454,7 @@ void plinearize_and_tally_weights(struct node **pcursor)
         *pcursor = cursor->right;
         int sex_bit = check_sex_bit(cursor->bs);
         if(found_sex < 0 && sex_bit)
-            found_sex = thearray.len;
+            found_sex = array.len;
         append_array(cursor);
         if(found_sex >= 0)
             sex_weights[cursor->bs.weight] += cursor->n;
@@ -465,15 +470,15 @@ void plinearize_and_tally_weights(struct node **pcursor)
 
 void linearize_and_tally_weights(void)
 {
-    thearray.len = 0;
+    array.len = 0;
     found_sex = -1;
     memset(no_sex_weights,0,(maximum_weight + 1)*sizeof(int));
     memset(sex_weights,0,(maximum_weight + 1)*sizeof(int));
 #if defined(STEPWISE) || defined(DIAG)
-    thetree.size = 0;
+    tree.size = 0;
 #endif
-    plinearize_and_tally_weights(&thetree.root);
-    assert(!thetree.root);
+    plinearize_and_tally_weights(&tree.root);
+    assert(!tree.root);
 }
 
 gsl_rng *rng;
@@ -484,25 +489,17 @@ void initialize_rng(void)
     rng = gsl_rng_alloc( gsl_rng_mt19937 );
 #if MACOSX
     int fd;
-    if((fd = open("/dev/urandom",O_RDONLY)) < 0)
-    {
-        fprintf(stderr,"Failed to open \"/dev/urandom\"");
-        exit(1);
-    }
-    if(read(fd,&seed,sizeof(seed)) < (ssize_t)sizeof(seed))
+
+    INVALID((fd = open("/dev/urandom",O_RDONLY)) < 0,
+        "Failed to open \"/dev/urandom\"");
+
+    INVALID(read(fd,&seed,sizeof(seed)) < (ssize_t)sizeof(seed),
 #else
-    if(getrandom(&seed,sizeof(seed),0) < (ssize_t)sizeof(seed))
+    INVALID(getrandom(&seed,sizeof(seed),0) < (ssize_t)sizeof(seed),
 #endif
-    {
-        fprintf(stderr,"Failed to properly initialize random number generator");
-        exit(1);
-    }
+        "Failed to properly initialize random number generator\n")
 #if MACOSX
-    if(close(fd) < 0)
-    {
-        fprintf(stderr,"Failed to close \"/dev/urandom\"");
-        exit(1);
-    }
+    INVALID(close(fd) < 0,"Failed to close \"/dev/urandom\"");
 #endif
     gsl_rng_set(rng,seed);
 }
@@ -514,17 +511,17 @@ void make_children(uint64 *scratch1,uint32 *choices, uint32 choices_ints)
     gsl_ran_discrete_t *tl,*tl_sex = NULL;
 
     linearize_and_tally_weights();
-    tl = gsl_ran_discrete_preproc(thearray.len,thearray.w);
+    tl = gsl_ran_discrete_preproc(array.len,array.w);
     if(found_sex > -1)
-        tl_sex = gsl_ran_discrete_preproc(thearray.len - found_sex,
-                thearray.w + found_sex);
+        tl_sex = gsl_ran_discrete_preproc(array.len - found_sex,
+                array.w + found_sex);
 
     for(i=0;i<nindiv;i++)
     {
         int k = gsl_ran_discrete(rng,tl);
         if(found_sex < 0 || k < found_sex)
         {
-            memcpy(scratch1,thearray.bs[k].bits,sizeof(uint64)*nwords);
+            memcpy(scratch1,array.bs[k].bits,sizeof(uint64)*nwords);
             res.bits = scratch1;
         }
         else
@@ -533,14 +530,14 @@ void make_children(uint64 *scratch1,uint32 *choices, uint32 choices_ints)
             for(j = 0 ; j < choices_ints; j++)
                 choices[j] = gsl_rng_get(rng);
 
-            uint64 *dad = thearray.bs[k].bits;
-            uint64 *mom = thearray.bs[gsl_ran_discrete(rng,tl_sex)+found_sex].bits;
+            uint64 *dad = array.bs[k].bits;
+            uint64 *mom = array.bs[gsl_ran_discrete(rng,tl_sex)+found_sex].bits;
             uint64 *choice;
             uint64 allele;
 
             for(j =  0; j < nloci ; j++)
             {
-                if(choices[j/(8*sizeof(uint32))] & (1 << ( j % (8*sizeof(uint32)))))
+                if(choices[j/bitspint] & (1 << ( j % bitspint)))
                     choice = mom;
                 else 
                     choice = dad;
@@ -628,7 +625,7 @@ void mutate(bitstr bs)
    {
        scratch = bs.bits[i];
        new = 0;
-       for(j = 0; j < (i==nwords - 1?residual:bitspword); j += allele_size,scratch >>= allele_size)
+       for(j = 0; j < FULLORPART(i); j += allele_size,scratch >>= allele_size)
        {
            scratch2 = gsl_ran_discrete(rng,mutant_tables[scratch & allele_mask]);
 #if DIAG
@@ -653,7 +650,6 @@ void mutate(bitstr bs)
 #endif
 }
 
-
 int main(int argc, char *argv[])
 {
     if(argc == 2 && !strcmp(argv[1],"--usage"))
@@ -675,9 +671,6 @@ int main(int argc, char *argv[])
         exit(0);
     }
 
-    bitstr bs;
-    initialize_rng();
-
     if(argc != 
 #if defined(STEPWISE)
             12
@@ -685,10 +678,9 @@ int main(int argc, char *argv[])
             13
 #endif
       )
-    {
-        fprintf(stderr,"Wrong number of arguments\n");
-        exit(1);
-    }
+        INVALID(1,"Wrong number of arguments\n");
+
+    bitstr bs;
 
     nloci = (uint32)strtoul(argv[1],NULL,0);
     INVALID_ARG(nloci == 0,nloci,argv[1]);
@@ -708,29 +700,25 @@ int main(int argc, char *argv[])
     uint32 nosex = (uint32)strtoul(argv[6],NULL,0);
     uint32 sex = (uint32)strtoul(argv[7],NULL,0);
 
-    initialize_mutation_parameters(argv);
-
     sex_mutation_rate = strtod(argv[10],NULL);
-
     sex_change = !!strtol(argv[11],NULL,0);
+
+    initialize_mutation_parameters(argv);
 
 #if !defined(STEPWISE)
     uint32 ngen = (uint32)strtoul(argv[12],NULL,0);
 #endif
 
+    /* allele fit in windows of 2,4,8,16,32 or 64 bits */
     allele_size = 0;
     uint32 s = nalleles - 1;
-    while(s || (8*sizeof(uint64)) % allele_size)
+    while(s || bitspword % allele_size)
     {
         allele_size++;
         s >>= 1;
     }
 
-    if(allele_size > 8*sizeof(uint64))
-    {
-        fprintf(stderr,"Too many alleles\n");
-        exit(1);
-    }
+    INVALID(allele_size > bitspword,"Too many alleles\n")
 
     allele_mask = (1UL << allele_size) - 1;
 
@@ -739,15 +727,16 @@ int main(int argc, char *argv[])
     residual = (nloci*allele_size) % bitspword;
 
     nindiv = nosex + sex;
-    INVALID((int)nosex < 0 || (int)sex < 0 || nindiv == 0,
+    INVALID(nindiv,
             "Invalid value for population size: nosex: %s, sex: %s\n",argv[4],argv[5]);
 
-    /* initialize structures */
+    initialize_rng();
     initialize_array();
 
+    /* Passed arrays for make_children */
     uint64 *scratch = malloc(sizeof(uint64)*nwords);
-    uint32 *choices = malloc(sizeof(uint32)*((nloci + 8*sizeof(uint32) - 1)/(8*sizeof(uint32))));
-    uint32 choices_ints = (nloci + 8*sizeof(uint32) - 1)/(8*sizeof(uint32));
+    uint32 *choices = malloc(bitspint*((nloci + bitspint - 1)/(8*bitspint)));
+    uint32 choices_ints = (nloci + 8*bitspint - 1)/(8*bitspint);
 
     no_sex_weights = malloc((maximum_weight + 1)*sizeof(uint32));
     sex_weights = malloc((maximum_weight + 1)*sizeof(uint32));
@@ -755,11 +744,13 @@ int main(int argc, char *argv[])
     env = maximum_weight/2;
 
     bs.bits = malloc(sizeof(uint64)*nwords);
+
 #ifndef STEPWISE
     /* Initialize a population randomly */
     uint32 i,j,k;
     size_t rand;
     double *uniform = malloc(sizeof(double)*nalleles);
+
     for(i = 0 ; i < nalleles ; i++)
         uniform[i] = 1.;
     gsl_ran_discrete_t *table = gsl_ran_discrete_preproc(nalleles,uniform);
@@ -769,7 +760,7 @@ int main(int argc, char *argv[])
         memset(bs.bits,0,sizeof(uint64)*nwords);
         for(j = 0 ; j < nwords ; j++)
         {
-            for(k = 0; k < (j == nwords - 1?residual:bitspword); k += allele_size)
+            for(k = 0; k < FULLORPART(j); k += allele_size)
             {
                 rand = gsl_ran_discrete(rng,table);
                 bs.bits[j] ^= rand << k;
@@ -786,6 +777,7 @@ int main(int argc, char *argv[])
     free(uniform);
     free(bs.bits);
 #endif
+
 #if !defined(DIAG) && !defined(STEPWISE)
     for(i = 0 ; i < ngen && (!i || printf("\n")); i++)
     {
@@ -804,6 +796,7 @@ int main(int argc, char *argv[])
     }
     printf("\n");
     return 0;
+
 #elif defined(STEPWISE)
     assert(nloci*allele_size <= 63);
     uint64 x;
@@ -820,14 +813,14 @@ int main(int argc, char *argv[])
                 dumptree();
                 linearize_and_tally_weights();
                 uint32 i;
-                for(i = 0; i<thearray.len;i++)
+                for(i = 0; i<array.len;i++)
                 {
-                    printf("0x%016lx ",thearray.bs[i].bits[0]);
+                    printf("0x%016lx ",array.bs[i].bits[0]);
                 } 
                 printf("\n");
-                for(i = 0; i<thearray.len;i++)
+                for(i = 0; i<array.len;i++)
                 {
-                    printf("%f ",thearray.w[i]);
+                    printf("%f ",array.w[i]);
                 }
                 printf("\n");
             }
@@ -868,10 +861,11 @@ int main(int argc, char *argv[])
         }
                 
         dumptree();
-        printf("    Tree size: %ld\n",thetree.size);
+        printf("    Tree size: %ld\n",tree.size);
         printf("    ncache.size = %ld\n",ncache.size);
 
     }
+
 #elif defined(DIAG)
     printf("Start\n");
     for(i=0;i<ngen;i++)
@@ -879,7 +873,7 @@ int main(int argc, char *argv[])
         dumptree();
         make_children(scratch,choices,choices_ints);
         dump_array();
-        hwm_tree_size = (hwm_tree_size >= thetree.size)?hwm_tree_size:thetree.size;
+        hwm_tree_size = (hwm_tree_size >= tree.size)?hwm_tree_size:tree.size;
     }
 
     printf("End\n");

@@ -27,6 +27,12 @@
     exit(1); \
 }
 
+#define GO() \
+{ \
+    while(isspace(*s2)) s2++; \
+}
+
+
 
 #define ISDELIM(c) ( (c) == ')' || (c) == '(' || (c) == '[' || (c) == ']' )
 #define ISLEFT(c) ( (c) == '(' || (c) == '[' )
@@ -40,7 +46,7 @@ void parse_rates(char *s)
 {
     char *s2;
     double rate = strtod(s,&s2);
-    while(isspace(*s2)) s2++;
+    GO();
     /* Only a number?  Use it as the rate */
     if(!*s2)
     {
@@ -63,24 +69,24 @@ void parse_rates(char *s)
 
     while(*s2)
     {
-        while(isspace(*s2)) s2++;
+        GO();
         if(ISLEFT(*s2))
         {
             if(depth > 0)
-                GRAPH("%s\n","Too deep");
+                GRAPH("Too deep\n");
             depth++;
             if(++row >= (int)nalleles)
-                GRAPH("%s\n","Too many rows");
+                GRAPH("Too many rows\n");
             col++;
             s2++;
         }
 
         else if(ISRIGHT(*s2))
         {
-            if(col < (int)nalleles )
-                GRAPH("%s\n","Not enough elements in set");
             if(depth == 0)
-                GRAPH("%s\n","Too shallow");
+                GRAPH("Too shallow\n");
+            if(col < (int)nalleles )
+                GRAPH("Not enough elements in set\n");
             depth--;
             col = -1;
             s2++;
@@ -89,23 +95,23 @@ void parse_rates(char *s)
         else if(*s2)
         {
             if(depth == 0)
-                GRAPH("%s\n","Token out of set");
+                GRAPH("Token out of set\n");
             if(row == col)
                 /* If diagonal element, skip word */
                 while(*s2 && !isspace(*s2) && !ISDELIM(*s2)) s2++;
             else
                 mutation_rate[INDEX(row,col)] = strtod(s2,&s2);
             if(!isspace(*s2) && !ISRIGHT(*s2))
-                GRAPH("%s\n","Unexpected character or end");
+                GRAPH("Unexpected character or end\n");
             col++;
             if(col > (int)nalleles)
-                GRAPH("%s\n","Too many columns");
+                GRAPH("Too many columns\n");
         }
     }
     if(depth > 0)
-        GRAPH("%s\n","Unexpected end of string");
+        GRAPH("Unexpected end of string\n");
     if(row < (int)nalleles - 1)
-        GRAPH("%s\n","Too few rows");
+        GRAPH("Too few rows\n");
     /* Fill in the diagonal elements */
     uint32 i,j;
     double sum;
@@ -141,54 +147,72 @@ void parse_contrib(char *s)
     }
 
     char *s2 = s;
+    char *ep;
     uint32 depth = 0;
     uint32 col = -1;
     while(*s2)
     {
-        while(isspace(*s2)) s2++;
+        GO();
         if(ISLEFT(*s2))
         {
             if(depth > 0)
-                GRAPH("%s\n","Too deep");
+                GRAPH("Too deep\n");
             depth++;
             col++;
             s2++;
+            GO();
+            goto token;
         }
 
         else if(ISRIGHT(*s2))
         {
-            if(col >= 2)
-                GRAPH("%s\n","Too many columns");
+            if(depth <= 0)
+                GRAPH("Too shallow\n");
             depth--;
             col = -1;
             s2++;
+            GO();
         }
 
-        else
+        else if(depth == 0 && *s2)
+            GRAPH("Unexpected character\n")
+
+        else if(depth == 1)
         {
-            if(col == 0)
-            {
-                uint32 n = strtol(s2,&s2,0);
-                if(!isspace(*s2) && !ISRIGHT(*s2))
-                    GRAPH("%s\n","Unexpected character or end");
-                if(n >= nalleles)
-                    GRAPH("No such allele\n");
-                if(mutation_contrib[n] != UINT_MAX)
-                    GRAPH("Illegal: %u already filled in\n",n);
-                mutation_contrib[n] = strtol(s2,&s2,0);
-                if(!isspace(*s2) && !ISRIGHT(*s2))
-                    GRAPH("%s\n","Unexpected character or end");
-            }
-            else
-                GRAPH("Unexpected character\n");
+token:
+            if(col >= 1)
+                GRAPH("Too many entries\n");
+            uint32 n = strtol(s2,&ep,0);
+            if(ep == s2)
+                GRAPH("Missing or invalid entry\n");
+            s2 = ep;
+            if(!isspace(*s2) && !ISRIGHT(*s2))
+                GRAPH("%s\n","Unexpected character or end");
+            if(n >= nalleles)
+                GRAPH("No such allele\n");
+            if(mutation_contrib[n] != UINT_MAX)
+                GRAPH("Illegal: %u already filled in\n",n);
+            col++;
+            GO();
+            mutation_contrib[n] = strtol(s2,&ep,0);
+            if(ep == s2)
+                GRAPH("Missing or invalid entry\n");
+            if(*s2 == '-')
+                GRAPH("Negative contributions not accepted\n");
+            s2 = ep;
+            if(!isspace(*s2) && !ISRIGHT(*s2))
+                GRAPH("%s\n","Unexpected character or end");
+            col++;
         }
     }
+    if(depth != 0)
+        GRAPH("Unexpected end of string\n");
+
     for(i = 0 ; i < nalleles ; i++)
         if(mutation_contrib[i] == UINT_MAX)
             PARSE_ERROR("Allele index %u not filled in\n",i);
 }
 
-/*
 int main(int argc, char *argv[])
 {
     if(argc != 4) { fprintf(stderr,"Fuck off\n");exit(1);}
@@ -205,7 +229,6 @@ int main(int argc, char *argv[])
     parse_contrib(argv[3]);
     printf("\n");
     for(i = 0 ; i < nalleles ; i++)
-        printf("%f ",mutation_contrib[i]);
+        printf("%u ",mutation_contrib[i]);
     printf("\n");
 }
-*/

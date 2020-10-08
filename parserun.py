@@ -37,7 +37,7 @@ try:
     nit = nit_pattern.parseString(next(stdin))[0]
 
 except StopIteration:
-    print("Too many lines in config file",file=sys.stderr)
+    print("Couldn't parse input",file=sys.stderr)
     sys.exit(1)
 
 m = '0'

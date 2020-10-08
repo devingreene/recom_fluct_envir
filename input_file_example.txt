@@ -1,0 +1,9 @@
+# Comment
+mutation_rate 1e-4
+shift_rate 1
+shift_size 1
+fitness_discount 0.5
+number_of_loci 8
+number_of_asex_individuals 2
+number_of_sex_individuals 2000
+number_of_iterations 100

@@ -1,11 +1,29 @@
 #!/bin/bash
 
+#set -xu
+
+TMPFILE=`mktemp`
+found_ddash=false
+file=/dev/null
+exec="./parse_results_plot.py $@"
 for arg
 do
-    if [ "$arg" = --dump ]
-    then  
-        ./parserun.py $@ < input_file.txt
-        exit 0
-    fi
-done
-./parserun.py $@ < input_file.txt | ./parse_results_plot.py $@
+    case "$arg" in 
+        --)
+            found_ddash=true  ;;
+        --dump)
+            exec=cat ;;
+        *)
+            if $found_ddash
+            then file="$arg"
+                break 
+            elif [ ${arg::1} != - ]
+            then
+                file="$arg"
+            fi ;;
+    esac
+done            
+
+./parserun.py $@ < "$file" > $TMPFILE
+if [ $? = 0 ] ; then $exec < $TMPFILE ; else false ; fi
+rm -f $TMPFILE

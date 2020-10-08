@@ -11,59 +11,62 @@ def stdin_no_sharp():
 
 stdin = stdin_no_sharp()
 
-maybecolon = Optional(":")
+maybecolon = Suppress(Optional(":"))
+def key(s):
+    return Suppress(Literal(s)) + maybecolon
 
 to_int = pyparsing_common.integer
-
 to_float = pyparsing_common.fnumber
-
-mr_pattern = Literal("mutation_rate") + maybecolon + to_float
+mr_pattern = key("mutation_rate") + to_float
+sr_pattern = key("shift_rate") + to_float
+ss_pattern = key("shift_size") + to_float
+fd_pattern = key("fitness_discount") +to_float
+nl_pattern = key("number_of_loci") + to_int
+nai_pattern = key("number_of_asex_individuals") + to_int
+nit_pattern = key("number_of_iterations") + to_int
+nsi_pattern = key("number_of_sex_individuals") + to_int
 
 try:
-    mr = mr_pattern.parseString(next(stdin),parseAll=True)[-1]
-    
-    assert 0 <= mr <=1
-    
-    tp_pattern = Literal("shift_rate") + maybecolon + to_float
-    
-    tp = tp_pattern.parseString(next(stdin),parseAll=True)[-1]
-    
-    assert tp <= 1.
-    
-    fd_pattern = Literal("fitness_discount") + maybecolon +to_float
-    
-    fd = fd_pattern.parseString(next(stdin),parseAll=True)[-1]
-    
-    nl_pattern = Literal("number_of_loci") + maybecolon + to_int
-    
-    nl = nl_pattern.parseString(next(stdin),parseAll=True)[-1]
-            
-    nai_pattern = Literal("number_of_asex_individuals") + maybecolon + to_int
-
-    nai = nai_pattern.parseString(next(stdin),parseAll=True)[-1]
-
-    nsi_pattern = Literal("number_of_sex_individuals") + maybecolon + to_int
-
-    nsi = nsi_pattern.parseString(next(stdin),parseAll=True)[-1]
-
-    nit_pattern = Literal("number_of_iterations") + to_int
-
-    nit = nit_pattern.parseString(next(stdin))[-1]
+    mr = mr_pattern.parseString(next(stdin),parseAll=True)[0]
+    sr = sr_pattern.parseString(next(stdin),parseAll=True)[0]
+    ss = ss_pattern.parseString(next(stdin),parseAll=True)[0]
+    fd = fd_pattern.parseString(next(stdin),parseAll=True)[0]
+    nl = nl_pattern.parseString(next(stdin),parseAll=True)[0]
+    nai = nai_pattern.parseString(next(stdin),parseAll=True)[0]
+    nsi = nsi_pattern.parseString(next(stdin),parseAll=True)[0]
+    nit = nit_pattern.parseString(next(stdin))[0]
 
 except StopIteration:
     print("Too many lines in config file",file=sys.stderr)
     sys.exit(1)
 
+m = '0'
+if "-m" in sys.argv[1:]:
+    m = '1'
+
 import subprocess
 
-exec_args = ["./exec",str(nl),str(tp),str(fd),str(nai),str(nsi),str(mr),str(nit)]
-print(" ".join(exec_args),file=sys.stderr)
-res = subprocess.run(exec_args,capture_output=True)
+exec_args = ["./exec",str(nl),
+                      str(sr),
+                      str(ss),
+                      str(fd),
+                      str(nai),
+                      str(nsi),
+                      str(mr),
+                      m,
+                      str(nit)]
 
+print(" ".join(exec_args),file=sys.stderr)
+res = subprocess.run(exec_args,stdout = subprocess.PIPE,
+        stderr = subprocess.PIPE)
 
 rc = res.returncode
 if rc != 0:
     sys.exit(rc)
 else:
     sys.stdout.write(res.stdout.decode())
-sys.stderr.write(res.stderr.decode())
+
+err_msg = res.stderr.decode()
+if err_msg:
+    print("Errors:",file=sys.stderr)
+    sys.stderr.write(err_msg)

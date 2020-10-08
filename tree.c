@@ -4,12 +4,24 @@
 #include<math.h>
 #include<assert.h>
 
+#if MACOSX
+#include<fcntl.h>
+#include<unistd.h>
+#endif
+
 #include<sys/random.h>
 
 #include<gsl/gsl_rng.h>
 #include<gsl/gsl_randist.h>
 
 #define bitspword (8*sizeof(uint64))
+#define INVALID(cond,name,arg) \
+    if((cond)) \
+    { \
+        fprintf(stderr,"Invalid value for " #name ": %s\n",arg); \
+        exit(1); \
+    }
+#define ENVELOPE_DEGREE (6)
 
 typedef unsigned long uint64;
 typedef unsigned int uint32;
@@ -25,12 +37,14 @@ typedef struct _bitstr
 uint32 nloci;
 double discount;
 double shift_rate;
+double shift_size;
 double mutation_rate;
+uint32 sex_change;
 
 uint32 nindiv;
 uint32 nwords;
 uint32 residual;
-int env;
+double env;
 
 /* Global for location of sexuals */
 int found_sex = -1;
@@ -55,6 +69,7 @@ uint32 weight(uint64 *bits)
     for(i = 0; i < nwords - 1; i++)
         for(s=bits[i];s;s >>= 1)
             res += s&1;
+    /* Don't count the sex bit */
     for(i=0,s=bits[nwords-1];s && i < residual ;s >>= 1,i++)
         res += s&1;
     return res;
@@ -63,6 +78,7 @@ uint32 weight(uint64 *bits)
 int cmp(bitstr b1, bitstr b2)
 {
     int i;
+    /* Bitstrings are ordered word-wise little endian */
     for(i = nwords - 1 ; i >= 0 ; i--)
     {
         if(b1.bits[i] == b2.bits[i])
@@ -91,6 +107,8 @@ struct node
 {
     bitstr bs;
     uint32 n;
+    /* Nodes are either in the cache or in the tree,
+     * never both, so unionize */
     union
     {
         struct node *left;
@@ -149,6 +167,8 @@ void putnode(struct node *n)
 }
 
 /* Node and tree methods */
+
+/* bitstring weights are computed always and only here */
 struct node *getnode(bitstr bs)
 {
     struct node *n;
@@ -295,6 +315,8 @@ struct arrays
 } thearray;
 
 /* Array methods */
+
+/* TODO Change array to parent_array? */
 void initialize_array(void)
 {
     thearray.bs = malloc(sizeof(*thearray.bs)*0x1000);
@@ -332,7 +354,7 @@ void append_array(struct node* n)
     /* XXX */
     /* Necessary? */
     thearray.bs[thearray.len].weight = n->bs.weight;
-    thearray.w[thearray.len] = pow(discount,abs(n->bs.weight - env))*n->n;
+    thearray.w[thearray.len] = pow(discount,fabs((int)n->bs.weight - env))*n->n;
     if(found_sex < 0) 
         /* Two-fold advantage */
         thearray.w[thearray.len] *= 2;
@@ -401,11 +423,28 @@ void initialize_rng(void)
 {
     uint64 seed;
     rng = gsl_rng_alloc( gsl_rng_mt19937 );
+#if MACOSX
+    int fd;
+    if((fd = open("/dev/urandom",O_RDONLY)) < 0)
+    {
+        fprintf(stderr,"Failed to open \"/dev/urandom\"");
+        exit(1);
+    }
+    if(read(fd,&seed,sizeof(seed)) < (ssize_t)sizeof(seed))
+#else
     if(getrandom(&seed,sizeof(seed),0) < (ssize_t)sizeof(seed))
+#endif
     {
         fprintf(stderr,"Failed to properly initialize random number generator");
         exit(1);
     }
+#if MACOSX
+    if(close(fd) < 0)
+    {
+        fprintf(stderr,"Failed to close \"/dev/urandom\"");
+        exit(1);
+    }
+#endif
     gsl_rng_set(rng,seed);
 }
 
@@ -433,7 +472,9 @@ void make_children(uint64 *scratch1)
         {
             uint64 *dad = thearray.bs[k].bits;
             uint64 *mom = thearray.bs[gsl_ran_discrete(rng,tl_sex)+found_sex].bits;
+            /* Where are Dad and Mom different? */
             xor(dad,mom,scratch1);
+            /* Where do we get Mom's genes? */
             for(j=0;j<nwords;j++)
             {
                 /* gsl_rng_mt19937 delivers only 32 bits per call */
@@ -450,14 +491,29 @@ void make_children(uint64 *scratch1)
     }
 }
 
-void shift_env(void)
+static inline double env_envelope(double x)
 {
-    double x = gsl_rng_uniform(rng);
-    if(x < shift_rate/2)
-        env--;
-    else if(x < shift_rate)
-        env++;
-    env = (env < 0)?0:(env > (int)nloci)?(int)nloci:env;
+    if(x > nloci || x < 0)
+        return 0;
+    x /= nloci/2.;
+    x -= 1;
+    return 1 - pow(x,ENVELOPE_DEGREE);
+}
+
+void pick_new_env(void)
+{
+    double cand = env + gsl_ran_gaussian_ziggurat(rng,shift_size);
+    double here = env_envelope(env);
+    double there = env_envelope(cand);
+    double chance = there/here;
+    if(!isfinite(chance))
+    {
+        fprintf(stderr,"Has undefined Metropolitan-Hastings probability: exiting\n");
+        exit(1);
+    }
+
+    if(gsl_rng_uniform(rng) < chance)
+        env = cand;
 }
 
 /* Mutation data structures */
@@ -486,11 +542,12 @@ void initialize_mutation_sites(void)
 
 void initialize_power_table(void)
 {
+    uint32 nloci1 = nloci + sex_change;
     power_table.table = malloc(sizeof(double)*8);
     power_table.len = 8;
     int i;
     for(i = 0 ; i < 8 ; i++)
-        power_table.table[i] = pow(1 - mutation_rate,nloci-i);
+        power_table.table[i] = pow(1 - mutation_rate,nloci1-i);
 #ifdef DIAG
     hwm_power_table_len = 8;
 #endif
@@ -498,13 +555,14 @@ void initialize_power_table(void)
 
 void extend_power_table(void)
 {
+    uint32 nloci1 = nloci + sex_change;
     power_table.table = realloc(power_table.table,sizeof(double)*(power_table.len+8));
     uint32 i;
-    for(i = 0 ; i < 8 && i + power_table.len < nloci ; i++)
-        power_table.table[i+power_table.len] = pow(1 - mutation_rate,nloci-i-power_table.len);
+    for(i = 0 ; i < 8 && i + power_table.len < nloci1 ; i++)
+        power_table.table[i+power_table.len] = pow(1 - mutation_rate,nloci1-i-power_table.len);
     power_table.len += 8;
-    if(power_table.len >= nloci)
-        power_table.len = nloci;
+    if(power_table.len >= nloci1)
+        power_table.len = nloci1;
 #ifdef DIAG
     hwm_power_table_len = power_table.len;
 #endif
@@ -512,11 +570,12 @@ void extend_power_table(void)
 
 void widen_mutation_sites(void)
 {
+    uint32 nloci1 = nloci + sex_change;
     mutation_sites.where = 
         realloc(mutation_sites.where,sizeof(int)*(mutation_sites.space+8));
     mutation_sites.space += 8;
-    if(mutation_sites.space > nloci)
-        mutation_sites.space = nloci;
+    if(mutation_sites.space > nloci1)
+        mutation_sites.space = nloci1;
 #ifdef DIAG
     hwm_mutation_sites_space = mutation_sites.space;
 #endif
@@ -524,7 +583,9 @@ void widen_mutation_sites(void)
 
 void mutate(bitstr bs)
 {
-   uint32 i,j,remaining_sites = nloci;
+   uint32 i,j;
+   /* If sex_bit can mutate */
+   uint32 nloci1 = nloci + sex_change;
 
    if(1. - mutation_rate == 1.)
        return;
@@ -535,12 +596,15 @@ void mutate(bitstr bs)
         for(i = 0 ; i < nwords - 1 ; i++)
             bs.bits[i] ^= ~0UL;
         bs.bits[nwords - 1] ^= (1UL << residual) - 1;
+        if(sex_change)
+            bs.bits[nwords - 1] ^= 1UL << residual;
 #ifdef DIAG
-        mutation_events += nloci;
+        mutation_events += nloci1;
 #endif
         return;
    }
 
+   uint32 remaining_sites = nloci1;
    mutation_sites.len = 0;
    for(i = 0 ;i < power_table.len ; i++)
    {
@@ -555,6 +619,13 @@ with_bigger_table:
 
        /* Loop until we get list with no repeats, and all 
         * sites are selected with equal probability */
+
+       /* remaining_sites < nloci1 means that we index over *remaining* 
+        * sites.  This means, for example, if nloci1 = 8 and we have 6,5,3 in
+        * mutations_sites.where so far, then if we choose index 4, 
+        * then this should correspond to site 7.  The following nested loop 
+        * insures that this happens and we have equal probabilities for remaining
+        * sites */
        do
        {
            oldwhere = where;
@@ -564,22 +635,22 @@ with_bigger_table:
                {
                    where++;
                    /* Mark as checked */
-                   mutation_sites.where[j] += nloci;
+                   mutation_sites.where[j] += nloci1;
                }
            }
        } while(oldwhere != where);
 
        /* Unmark */
        for(j = 0 ; j < mutation_sites.len; j++)
-           if(mutation_sites.where[j] >= nloci)
-               mutation_sites.where[j] -= nloci;
+           if(mutation_sites.where[j] >= nloci1)
+               mutation_sites.where[j] -= nloci1;
 
-       assert(where < nloci);
+       assert(where < nloci1);
        mutation_sites.where[mutation_sites.len++] = where;
-       if(mutation_sites.space < nloci && mutation_sites.len >= mutation_sites.space)
+       if(mutation_sites.space < nloci1 && mutation_sites.len >= mutation_sites.space)
            widen_mutation_sites();
    }
-   if(i == power_table.len && i < nloci)
+   if(i == power_table.len && i < nloci1)
    {
        extend_power_table();
        goto with_bigger_table;
@@ -599,10 +670,12 @@ int main(int argc, char *argv[])
                 "./exec \\\n"
                 "   nloci \\\n"
                 "   shift_rate \\\n"
+                "   shift_size \\\n"
                 "   discount \\\n"
                 "   nosex \\\n"
                 "   sex \\\n"
                 "   mutation_rate \\\n"
+                "   sex_change \\\n"
                 "   [ ngen ]\n");
         exit(0);
     }
@@ -612,47 +685,43 @@ int main(int argc, char *argv[])
 
     if(argc != 
 #if defined(STEPWISE)
-            7
+            9
 #else
-            8
+            10
 #endif
       )
-            
     {
         fprintf(stderr,"Wrong number of arguments\n");
         exit(1);
     }
+
     nloci = (uint32)strtoul(argv[1],NULL,0);
-    if((int)nloci <= 0)
-    {
-        fprintf(stderr,"Invalid value for nloci: %s\n",argv[1]);
-        goto out;
-    }
+    INVALID((int)nloci <= 0,nloci,argv[1]);
     shift_rate = strtod(argv[2],NULL);
-    discount = strtod(argv[3],NULL);
-    uint32 nosex = (uint32)strtoul(argv[4],NULL,0);
-    uint32 sex = (uint32)strtoul(argv[5],NULL,0);
-    mutation_rate = strtod(argv[6],NULL);
+    INVALID(shift_rate < 0 || shift_rate > 1,shift_rate,argv[2]);
+    shift_size = strtod(argv[3],NULL);
+    INVALID(shift_size < 0,shift_size,argv[3]);
+    discount = strtod(argv[4],NULL);
+    INVALID(discount < 0 || discount > 1,discount,argv[4]);
+    uint32 nosex = (uint32)strtoul(argv[5],NULL,0);
+    uint32 sex = (uint32)strtoul(argv[6],NULL,0);
+    mutation_rate = strtod(argv[7],NULL);
+    INVALID(mutation_rate < 0 || mutation_rate > 1,mutation_rate,argv[7]);
+    sex_change = !!strtol(argv[8],NULL,0);
 #if !defined(STEPWISE)
-    uint32 ngen = (uint32)strtoul(argv[7],NULL,0);
+    uint32 ngen = (uint32)strtoul(argv[9],NULL,0);
 #endif
 
-    if(mutation_rate < 0 || mutation_rate > 1)
-    {
-        fprintf(stderr,"Invalid value for mutation rate: %s\n",argv[6]);
-        goto out;
-    }
 
-    /* Extra padding for sex it */
+    /* Extra padding for sex bit */
     nwords = nloci/bitspword + 1;
     residual = nloci % bitspword;
 
     nindiv = nosex + sex;
     if( (int)nosex < 0 || (int)sex < 0 || nindiv == 0)
-    
     {
         fprintf(stderr,"Invalid value for population size: nosex: %s, sex: %s\n",argv[4],argv[5]);
-        goto out;
+        exit(1);
     }
 
     /* initialize structures */
@@ -684,7 +753,7 @@ int main(int argc, char *argv[])
         make_children(scratch);
 
         /* Print weights */
-        printf("env: %d\n",env);
+        printf("env: %8.2f\n",env);
         printf("no_sex: 0:%u",no_sex_weights[0]);
         for(j = 1 ; j < nloci + 1 ; j++)
             printf(" %u:%u",j,no_sex_weights[j]);
@@ -692,7 +761,7 @@ int main(int argc, char *argv[])
         for(j = 1 ; j < nloci + 1 ; j++)
             printf(" %u:%u",j,sex_weights[j]);
 
-        shift_env();
+        pick_new_env();
     }
     printf("\n");
     return 0;
@@ -727,7 +796,7 @@ int main(int argc, char *argv[])
             {
                 make_children(scratch);
                 dump_array();
-                printf("%d\n",found_sex);
+                printf("Found sex?: %d\n",found_sex);
                 dumptree();
             }
 
@@ -793,6 +862,4 @@ int main(int argc, char *argv[])
     printf("Mutation events: %lu\n",mutation_events);
     return 0;
 #endif
-out:
-    exit(1);
 }

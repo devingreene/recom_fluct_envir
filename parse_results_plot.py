@@ -7,7 +7,7 @@ to_int = pyparsing_common.integer
 
 to_float = pyparsing_common.fnumber
 
-env_pattern = Suppress(Literal("env") + ":") + to_int
+env_pattern = Suppress(Literal("env") + ":") + to_float
 
 def tally_pattern(label):
     return Suppress(label + ":") + OneOrMore(Suppress(to_int + ":") + to_int)
@@ -62,6 +62,11 @@ else:
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import getopt
+
+ugly = False
+if "--ugly" in sys.argv[1:]:
+    ugly = True
 
 size = (a_arr[0] + s_arr[0]).sum()
 
@@ -76,11 +81,14 @@ ax2 = plt.subplot(1,6,6,frame_on=False,xticks=[],yticks=[])
 
 lines = ax1.plot(range(len(a_arr)),a_arr)
 ax1.set_prop_cycle(plt.rcParams['axes.prop_cycle'])
-lines += ax1.plot(range(len(s_arr)),s_arr,ls='dotted')
+lines += ax1.plot(range(len(s_arr)),s_arr,ls='dashed' if ugly else 'dotted')
 # Autoscale pads, but set_ylim doesn't.  So I add invisible points.
 ax1.plot([0,0],[0,size],'y')[0].set_visible(False)
 
-ax2.legend(lines,labels,loc="center")
+leg =ax2.legend(lines,labels,loc="center")
+if ugly:
+    for line in leg.get_lines():
+        line.set_linewidth(1.5*line.get_linewidth())
 
 ax1_r = ax1.twinx()
 ax1_r.plot(range(len(s_arr_old)),envs,'go',mfc='white')

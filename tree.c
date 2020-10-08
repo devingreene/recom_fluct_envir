@@ -727,8 +727,8 @@ int main(int argc, char *argv[])
     residual = (nloci*allele_size) % bitspword;
 
     nindiv = nosex + sex;
-    INVALID(nindiv,
-            "Invalid value for population size: nosex: %s, sex: %s\n",argv[4],argv[5]);
+    INVALID(nindiv == 0,
+            "Invalid value for population size: nosex: %s, sex: %s\n",argv[6],argv[7]);
 
     initialize_rng();
     initialize_array();

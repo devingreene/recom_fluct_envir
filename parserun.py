@@ -37,7 +37,7 @@ try:
     nit = nit_pattern.parseString(next(stdin))[0]
 
 except StopIteration:
-    print("Too many lines in config file",file=sys.stderr)
+    print("Couldn't parse input",file=sys.stderr)
     sys.exit(1)
 
 m = '0'
@@ -60,13 +60,9 @@ print(" ".join(exec_args),file=sys.stderr)
 res = subprocess.run(exec_args,stdout = subprocess.PIPE,
         stderr = subprocess.PIPE)
 
-rc = res.returncode
-if rc != 0:
-    sys.exit(rc)
-else:
-    sys.stdout.write(res.stdout.decode())
+sys.stdout.write(res.stdout.decode())
 
 err_msg = res.stderr.decode()
 if err_msg:
     print("Errors:",file=sys.stderr)
-    sys.stderr.write(err_msg)
+    sys.stderr.write("  "+err_msg)

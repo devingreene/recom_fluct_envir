@@ -5,10 +5,23 @@
 TMPFILE=`mktemp`
 found_ddash=false
 file=/dev/null
+usage="./doit [ --dump ] \"parseable file\""
 exec="./parse_results_plot.py $@"
+if [ $# -eq 0 ]
+then
+    echo >&2 "$usage"
+    exit
+fi
+
 for arg
 do
     case "$arg" in 
+        --help|-h|--usage)
+            if ! $found_ddash
+            then
+                echo >&2 "$usage"
+                exit
+            fi ;;
         --)
             found_ddash=true  ;;
         --dump)

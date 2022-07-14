@@ -122,7 +122,10 @@ uint32 weight(uint64 *bits)
 int cmp(bitstr b1, bitstr b2)
 {
     int i;
-    /* Bitstrings are ordered word-wise little endian */
+    /* Bitstrings are ordered word-wise little endian.  This
+     * is so that the sex bit sorts the array into no_sex
+     * genotypes followed by sex genotypes.  */
+
     for(i = nwords - 1 ; i >= 0 ; i--)
     {
         if(b1.bits[i] == b2.bits[i])
@@ -372,6 +375,7 @@ void dumptree(void)
 }
 #endif
 
+#define INITIAL_ARRAY_SIZE (0x1000)
 struct _array
 {
     bitstr *bs;
@@ -385,16 +389,16 @@ struct _array
 /* TODO Change array to parent_array? */
 void initialize_array(void)
 {
-    array.bs = malloc(sizeof(*array.bs)*0x1000);
+    array.bs = malloc(sizeof(*array.bs)*INITIAL_ARRAY_SIZE);
     /* Bit strings in one call to malloc */
-    uint64 *allbits = malloc(sizeof(uint64)*nwords*0x1000);
+    uint64 *allbits = malloc(sizeof(uint64)*nwords*INITIAL_ARRAY_SIZE);
 
     int i;
-    for(i=0;i<0x1000;i++,allbits += nwords)
+    for(i=0;i<INITIAL_ARRAY_SIZE;i++, /* ptr arith */ allbits += nwords)
         array.bs[i].bits = allbits;
-    array.w    = malloc(sizeof(double)*0x1000);
+    array.w    = malloc(sizeof(double)*INITIAL_ARRAY_SIZE);
     array.len  = 0;
-    array.space = 0x1000;
+    array.space = INITIAL_ARRAY_SIZE;
 }
 
 void increase_array_space(void)
@@ -504,6 +508,8 @@ void initialize_rng(void)
     gsl_rng_set(rng,seed);
 }
 
+/* Most of the action happens here.  We tear down our tree
+ * into an array and build a new generation from it. */
 void make_children(uint64 *scratch1,uint32 *choices, uint32 choices_ints)
 {
     uint32 i,j;
@@ -514,7 +520,7 @@ void make_children(uint64 *scratch1,uint32 *choices, uint32 choices_ints)
     tl = gsl_ran_discrete_preproc(array.len,array.w);
     if(found_sex > -1)
         tl_sex = gsl_ran_discrete_preproc(array.len - found_sex,
-                array.w + found_sex);
+                /* Ptr arith */ array.w + found_sex);
 
     for(i=0;i<nindiv;i++)
     {
@@ -526,6 +532,10 @@ void make_children(uint64 *scratch1,uint32 *choices, uint32 choices_ints)
         }
         else
         {
+            /* Recombination */
+
+            /* Initialize to zero, then fill in with mom and
+             * dad's alleles */
             memset(scratch1,0,sizeof(uint64)*nwords);
             for(j = 0 ; j < choices_ints; j++)
                 choices[j] = gsl_rng_get(rng);
@@ -548,12 +558,16 @@ void make_children(uint64 *scratch1,uint32 *choices, uint32 choices_ints)
             }
 
             res.bits = scratch1;
-            /* We may have cleared sex bit, so reset it */
+            /* Set the sex bit */
             set_sex_bit(res);
         }
 #if defined(DIAG) || defined(STEPWISE)
         ASSERT_GOOD_GENOTYPE(res.bits);
 #endif
+        /* Assert that double checks that bits more significant
+         * than sex bit are zero */
+        assert(( res.bits[nwords-1] & (uint64)(-1UL) << (residual + 1) )  == 0);
+
         mutate(res);
         insert(res);
     }
@@ -606,6 +620,7 @@ void initialize_mutation_parameters(char *argv[])
     mutant_tables = malloc(sizeof(*mutant_tables)*nalleles);
     uint32 i;
     for(i = 0 ; i < nalleles ; i++)
+        /* Pointer arithmetic in 2nd argument */
         mutant_tables[i] = gsl_ran_discrete_preproc(nalleles,
                 mutation_rate + i*nalleles);
 
@@ -710,6 +725,7 @@ int main(int argc, char *argv[])
 #endif
 
     /* allele fit in windows of 2,4,8,16,32 or 64 bits */
+    assert(nalleles >= 2);
     allele_size = 0;
     uint32 s = nalleles - 1;
     while(s || bitspword % allele_size)
@@ -735,8 +751,11 @@ int main(int argc, char *argv[])
 
     /* Passed arrays for make_children */
     uint64 *scratch = malloc(sizeof(uint64)*nwords);
-    uint32 *choices = malloc(bitspint*((nloci + bitspint - 1)/(8*bitspint)));
-    uint32 choices_ints = (nloci + 8*bitspint - 1)/(8*bitspint);
+    /* Used in recombination: One bit per locus, rounded up to nearest whole
+     * number of ints - (nloci + bitspnt -1)/bitspint = # of ints needed to fit
+     * nloci bits */
+    uint32 *choices = malloc(sizeof(uint32)*((nloci + bitspint - 1)/bitspint));
+    uint32 choices_ints = (nloci + bitspint - 1)/bitspint;
 
     no_sex_weights = malloc((maximum_weight + 1)*sizeof(uint32));
     sex_weights = malloc((maximum_weight + 1)*sizeof(uint32));
@@ -757,6 +776,9 @@ int main(int argc, char *argv[])
 
     for(i = 0; i < nindiv ; i++)
     {
+        /* Initialize to zero so that 
+         *  - we can just xor alleles
+         *  - sex bit is MSB */
         memset(bs.bits,0,sizeof(uint64)*nwords);
         for(j = 0 ; j < nwords ; j++)
         {
@@ -885,3 +907,4 @@ int main(int argc, char *argv[])
     return 0;
 #endif
 }
+// vim: tw=60

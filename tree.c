@@ -41,25 +41,6 @@
       (_i) == nwords - 1?residual:bitspword \
     ) 
 
-#if defined(DIAG) || defined(STEPWISE)
-#define ASSERT_PRINT(stmt,bits) \
-{ \
-    assert((stmt) || !bitprint(bits,1)); \
-}
-
-#define ASSERT_GOOD_GENOTYPE(bits) \
-{ \
-    uint32 _i,_j; \
-    uint64 _word; \
-    for(_i = 0 ; _i < nwords ; _i++) \
-    { \
-        _word = (bits)[_i]; \
-        for(_j = 0 ; _j < FULLORPART(_i); _j += allele_size, _word >>= allele_size) \
-        ASSERT_PRINT( (_word & allele_mask) < nalleles,bits); \
-    } \
-    ASSERT_PRINT(_word <= 1,bits); \
-} 
-#endif
 #define ENVELOPE_DEGREE (6)
 
 extern void parse_rates(char *s);
@@ -95,14 +76,6 @@ double env;
 
 /* Global for location of sexuals */
 int found_sex = -1;
-
-/* High water marks */
-#ifdef DIAG
-uint32 hwm_cache;
-uint64 mutation_events;
-uint32 hwm_tree_size;
-uint32 hwm_tree_depth;
-#endif
 
 /* Forward declarations */
 void mutate(bitstr bs);
@@ -178,39 +151,17 @@ void set_sex_bit(bitstr bs)
 struct nodecache
 {
     struct node* head;
-#if defined(STEPWISE) || defined(DIAG)
-    size_t size;
-#endif
-} ncache = {NULL
-#if defined(STEPWISE) || defined(DIAG)
-    ,0} ;
-#else
-    };
-#endif
+} ncache = {NULL};
 
 struct _tree
 {
     struct node *root;
-#if defined(STEPWISE) || defined(DIAG)
-    size_t size;
-#endif
-} tree = {NULL
-#if defined(STEPWISE) || defined(DIAG)
-    ,0};
-#else
-};
-#endif
+} tree = {NULL};
 
 void putnode(struct node *n)
 {
     n->next = ncache.head;
     ncache.head = n;
-#if defined(STEPWISE) || defined(DIAG)
-    ncache.size++;
-#ifdef DIAG
-    hwm_cache = (hwm_cache < ncache.size)?ncache.size:hwm_cache;
-#endif
-#endif
 }
 
 /* Node and tree methods */
@@ -223,10 +174,6 @@ struct node *getnode(bitstr bs)
     {
         n = ncache.head;
         ncache.head = n->next;
-#if defined(STEPWISE) || defined(DIAG)
-        assert(ncache.size);
-        ncache.size--;
-#endif
     }
     else
     {
@@ -235,10 +182,6 @@ struct node *getnode(bitstr bs)
     }
     memcpy(n->bs.bits,bs.bits,nwords*sizeof(uint64));
     n->bs.weight = weight(n->bs.bits);
-#if defined(DIAG) || defined(STEPWISE)
-    ASSERT_PRINT(n->bs.weight <= maximum_weight, n->bs.bits);
-    ASSERT_GOOD_GENOTYPE(n->bs.bits);
-#endif
     n->n = 1;
     n->left = n->right = NULL;
     return n;
@@ -248,9 +191,6 @@ void insert(bitstr bs)
 {
    struct node **pcursor = &tree.root;
    struct node *cursor;
-#ifdef DIAG
-   uint32 depth = 0;
-#endif
 
    while((cursor = *pcursor))
    {
@@ -264,116 +204,12 @@ void insert(bitstr bs)
            cursor->n++;
            return;
        }
-#ifdef DIAG
-       depth++;
-#endif
    }
 
    struct node *new = getnode(bs);
 
    *pcursor = new;
-#if defined(DIAG) || defined(STEPWISE)
-   tree.size++;
-#ifdef DIAG
-   hwm_tree_depth = 
-       hwm_tree_depth >= depth?hwm_tree_depth:depth;
-#endif
-#endif
 }
-
-#ifdef STEPWISE
-void remove_node(struct node **prev, struct node *child)
-{
-    struct node *n;
-
-    if((n = child->left))
-    {
-        *prev = n;
-        prev = &child->right;
-        while(*prev)
-            prev = &(*prev)->left;
-        *prev = n->right;
-        n->right = child->right;
-    } else
-        *prev = child->right;
-
-    putnode(child);
-    tree.size--;
-}
-
-void delete(bitstr bs)
-{
-    struct node **pcursor = &tree.root;
-    struct node *cursor;
-
-    while((cursor = *pcursor))
-    {
-       int d = cmp(cursor->bs,bs);
-       if(d < 0)
-           pcursor = &cursor->left;
-       else if(d > 0)
-           pcursor = &cursor->right;
-       else if(cursor->n > 1)
-       {
-           cursor->n--;
-           return;
-       }
-       else
-       {
-           remove_node(pcursor,cursor);
-           return;
-       }
-    }
-}
-#endif
-
-#if defined(STEPWISE) || defined(DIAG)
-/* Printing methods */
-int bitprint(uint64 *bits,int nl)
-{
-    uint32 i,j,b;
-    uint64 word;
-
-    for(i = 0; i < nwords ; i++)
-    {
-        word = bits[i];
-        for(j = 0 ; j < FULLORPART(i) ; j += allele_size , word >>= allele_size)
-        {
-            j>0?printf("|"):0;
-            for(b=0 ; b < allele_size ; b++)
-                printf("%d",!!(word & ( 1UL << (allele_size - b - 1))));
-        }
-    }
-    printf("|");
-    printf("%ld",word);
-    if(nl) printf("\n");
-    return 1;
-}
-
-int printbf(struct node *node)
-{
-    int n = node->n;
-    uint32 weight = node->bs.weight;
-    bitprint(node->bs.bits,0);
-    return printf(": %05u %05u\n",n,weight);
-}
-
-void partialdump(struct node *n)
-{
-    if(n)
-    {
-        partialdump(n->left);
-        printbf(n);
-        partialdump(n->right);
-    }
-}
-
-void dumptree(void)
-{
-    printf("Tree: \n");
-    partialdump(tree.root);
-}
-#endif
 
 #define INITIAL_ARRAY_SIZE (0x1000)
 struct _array
@@ -431,20 +267,6 @@ void append_array(struct node* n)
     assert(array.len <= nindiv);
 }
 
-#if defined(DIAG) || defined(STEPWISE)
-void dump_array(void)
-{
-    printf("Array:\n");
-    uint32 i;
-    for(i = 0 ; i < array.len && (!i || printf("\n")) ; i++)
-    {
-        bitprint(array.bs[i].bits,0);
-        printf(": %6.6f",array.w[i]);
-    }
-    printf("\n");
-}
-#endif
-
 /* Globals */
 uint32 *no_sex_weights;
 uint32 *sex_weights;
@@ -465,10 +287,6 @@ void plinearize_and_tally_weights(struct node **pcursor)
         else
             no_sex_weights[cursor->bs.weight] += cursor->n ;
         putnode(cursor);
-#ifdef DIAG
-        assert(( found_sex >= 0 && sex_bit ) ||
-                ( found_sex < 0 && !sex_bit ) || !printf("%d %d\n",found_sex,sex_bit));
-#endif
     }
 }
 
@@ -478,9 +296,6 @@ void linearize_and_tally_weights(void)
     found_sex = -1;
     memset(no_sex_weights,0,(maximum_weight + 1)*sizeof(int));
     memset(sex_weights,0,(maximum_weight + 1)*sizeof(int));
-#if defined(STEPWISE) || defined(DIAG)
-    tree.size = 0;
-#endif
     plinearize_and_tally_weights(&tree.root);
     assert(!tree.root);
 }
@@ -561,9 +376,6 @@ void make_children(uint64 *scratch1,uint32 *choices, uint32 choices_ints)
             /* Set the sex bit */
             set_sex_bit(res);
         }
-#if defined(DIAG) || defined(STEPWISE)
-        ASSERT_GOOD_GENOTYPE(res.bits);
-#endif
         /* Assert that double checks that bits more significant
          * than sex bit are zero */
         assert(( res.bits[nwords-1] & (uint64)(-1UL) << (residual + 1) )  == 0);
@@ -643,10 +455,6 @@ void mutate(bitstr bs)
        for(j = 0; j < FULLORPART(i); j += allele_size,scratch >>= allele_size)
        {
            scratch2 = gsl_ran_discrete(rng,mutant_tables[scratch & allele_mask]);
-#if DIAG
-           if((scratch & allele_mask) != scratch2)
-               mutation_events++;
-#endif
            new ^= scratch2 << j;
        }
        bs.bits[i] = new;
@@ -660,9 +468,6 @@ void mutate(bitstr bs)
        bs.bits[nwords - 1]
            ^= (uint64)!!(gsl_rng_uniform(rng) < sex_mutation_rate) << residual;
    }
-#if defined(DIAG) || defined(STEPWISE)
-   ASSERT_GOOD_GENOTYPE(bs.bits);
-#endif
 }
 
 int main(int argc, char *argv[])
@@ -686,13 +491,7 @@ int main(int argc, char *argv[])
         exit(0);
     }
 
-    if(argc != 
-#if defined(STEPWISE)
-            12
-#else
-            13
-#endif
-      )
+    if(argc != 13)
         INVALID(1,"Wrong number of arguments\n");
 
     bitstr bs;
@@ -720,9 +519,7 @@ int main(int argc, char *argv[])
 
     initialize_mutation_parameters(argv);
 
-#if !defined(STEPWISE)
     uint32 ngen = (uint32)strtoul(argv[12],NULL,0);
-#endif
 
     /* allele fit in windows of 2,4,8,16,32 or 64 bits */
     assert(nalleles >= 2);
@@ -764,7 +561,6 @@ int main(int argc, char *argv[])
 
     bs.bits = malloc(sizeof(uint64)*nwords);
 
-#ifndef STEPWISE
     /* Initialize a population randomly */
     uint32 i,j,k;
     size_t rand;
@@ -790,17 +586,12 @@ int main(int argc, char *argv[])
         }
         if(i < sex)
             set_sex_bit(bs);
-#ifdef DIAG
-        ASSERT_GOOD_GENOTYPE(bs.bits);
-#endif
         insert(bs);
     }
     gsl_ran_discrete_free(table);
     free(uniform);
     free(bs.bits);
-#endif
 
-#if !defined(DIAG) && !defined(STEPWISE)
     for(i = 0 ; i < ngen && (!i || printf("\n")); i++)
     {
         make_children(scratch,choices,choices_ints);
@@ -818,93 +609,4 @@ int main(int argc, char *argv[])
     }
     printf("\n");
     return 0;
-
-#elif defined(STEPWISE)
-    assert(nloci*allele_size <= 63);
-    uint64 x;
-    char line[1024];
-    for(;;)
-    {
-        if(fgets(line,1024,stdin) == NULL)
-            break;
-        if(line[0] == '\n') { dumptree(); continue;}
-        if(line[1] == '\n')
-        {
-            if(line[0] == 'd')
-            {
-                dumptree();
-                linearize_and_tally_weights();
-                uint32 i;
-                for(i = 0; i<array.len;i++)
-                {
-                    printf("0x%016lx ",array.bs[i].bits[0]);
-                } 
-                printf("\n");
-                for(i = 0; i<array.len;i++)
-                {
-                    printf("%f ",array.w[i]);
-                }
-                printf("\n");
-            }
-            if(line[0] == 'c')
-            {
-                make_children(scratch,choices, choices_ints);
-                dump_array();
-                printf("Found sex?: %d\n",found_sex);
-                dumptree();
-            }
-
-            continue;
-        }
-
-        char *endptr;
-        x = strtoul(line,&endptr,2);
-        bs.bits = &x;
-
-        if(endptr)
-        {
-            int i;
-            long j;
-            if(endptr[0] == '-')
-            {
-                j = strtol(endptr,NULL,0);
-                for(i=0;i< -j ; i++)
-                    delete(bs);
-            }
-            else if(endptr[0] == '+')
-            {
-                endptr++;
-                j = strtol(endptr,NULL,0);
-                for(i=0;i<j;i++)
-                    insert(bs);
-            }
-            else
-                INVALID(1,"Invalid entry\n");
-        }
-                
-        dumptree();
-        printf("    Tree size: %ld\n",tree.size);
-        printf("    ncache.size = %ld\n",ncache.size);
-
-    }
-
-#elif defined(DIAG)
-    printf("Start\n");
-    for(i=0;i<ngen;i++)
-    {
-        dumptree();
-        make_children(scratch,choices,choices_ints);
-        dump_array();
-        hwm_tree_size = (hwm_tree_size >= tree.size)?hwm_tree_size:tree.size;
-    }
-
-    printf("End\n");
-    dumptree();
-    printf("High water mark tree_size: %u\n",hwm_tree_size);
-    printf("High water mark tree depth: %u\n",hwm_tree_depth);
-    printf("High water mark cache_size: %u\n",hwm_cache);
-    printf("Mutation events: %lu\n",mutation_events);
-    return 0;
-#endif
 }
-// vim: tw=60

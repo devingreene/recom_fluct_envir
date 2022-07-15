@@ -7,4 +7,5 @@ else
 endif
 
 exec: tree.c
-	cc -DMACOSX=$(MACOSX) -Wall -Wextra -O2 -o exec tree.c parse_mut.c -lm -lgsl -lgslcblas
+	cc -DMACOSX=$(MACOSX) $(CFLAGS) -Wall -Wextra -O2 -o \
+		exec tree.c parse_mut.c -lm -lgsl -lgslcblas

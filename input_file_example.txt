@@ -1,12 +1,32 @@
-# Comment
+# This is an example input file.  An explanation is given for some
+# fields below.
+
+# Currently unused
 shift_rate 1
+
+# Standard deviation of (gaussian) noise
 shift_size 1
+
+# Factor of decrease for each unit of deviation from optimal fitness.
 fitness_discount 0.5
+
 number_of_loci 8
 number_of_alleles 3
+
+# Either a single number of a matrix
 mutation_rate 1e-4
+
+# Score for each allele.  The maximum environmental score is given by
+#
+#                   ( max contribution ) * nalleles
+#
 mutation_contrib ( 0 1 ) ( 1 0 ) ( 2 2 )
+
+# Rate at which sex allele mutates
 sex_mutation_rate 1e-4
+
 number_of_asex_individuals 2
 number_of_sex_individuals 2000
+
 number_of_iterations 100
+# vim: tw=70 comments=b\:#

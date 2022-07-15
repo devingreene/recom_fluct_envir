@@ -383,6 +383,9 @@ void make_children(uint64 *scratch1,uint32 *choices, uint32 choices_ints)
         mutate(res);
         insert(res);
     }
+    gsl_ran_discrete_free(tl);
+    gsl_ran_discrete_free(tl_sex);
+
 }
 
 static inline double env_envelope(double x)

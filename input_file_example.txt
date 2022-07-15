@@ -29,4 +29,3 @@ number_of_asex_individuals 2
 number_of_sex_individuals 2000
 
 number_of_iterations 100
-# vim: tw=70 comments=b\:#

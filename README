@@ -1,2 +1,20 @@
 Exploring the effects of recombination on Darwinian evolution
 in a fluctuating environment.
+
+`doit' is a Bash executable.  The command
+
+./doit input_file
+
+parses the parameters in `input_file', and produces a
+visual representation of the results in a file `out.pdf'.
+
+The option `--dump' as in
+
+./doit --dump input_file
+
+outputs a textual representation of the results.
+
+An example input file, `input_file_example.txt', is included, which contains an
+explanation of the fields.
+
+For a slightly more technical description, see DESCRIPTION.txt.

@@ -98,3 +98,4 @@ ax1_r.grid()
 ax1.grid(axis='x')
 
 plt.savefig("out.pdf")
+print("Plotted in out.pdf",file=sys.stderr)

@@ -16,7 +16,11 @@ number_of_alleles 3
 # Either a single number of a matrix
 mutation_rate 1e-4
 
-# Score for each allele.  The maximum environmental score is given by
+# Score for each allele.  The fitness of a genotype is given by 
+#
+#               fitness_discount^| sum_of_contributions - env |
+#
+# The maximum environmental score is given by
 #
 #                   ( max contribution ) * nalleles
 #

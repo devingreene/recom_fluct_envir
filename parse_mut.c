@@ -5,6 +5,11 @@
 #include<limits.h>
 #include "this.h"
 
+/*
+ * Engine for parsing mutation rates and fitness
+ * contributions
+ * */
+
 #define PARSE_ERROR(fmt,...)  \
 { \
     fprintf(stderr,fmt,##__VA_ARGS__); \

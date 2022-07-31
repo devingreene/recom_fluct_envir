@@ -3,6 +3,10 @@ from pyparsing import *
 import numpy as np
 import sys
 
+#
+# Parse textual output and make a plot
+#
+
 to_int = pyparsing_common.integer
 
 to_float = pyparsing_common.fnumber
@@ -82,7 +86,7 @@ ax2 = plt.subplot(1,6,6,frame_on=False,xticks=[],yticks=[])
 lines = ax1.plot(range(len(a_arr)),a_arr)
 ax1.set_prop_cycle(plt.rcParams['axes.prop_cycle'])
 lines += ax1.plot(range(len(s_arr)),s_arr,ls='dashed' if ugly else 'dotted')
-# Autoscale pads, but set_ylim doesn't.  So I add invisible points.
+# Autoscale does padding, but set_ylim doesn't.  So I add invisible points.
 ax1.plot([0,0],[0,size],'y')[0].set_visible(False)
 
 leg =ax2.legend(lines,labels,loc="center")

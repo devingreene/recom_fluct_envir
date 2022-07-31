@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+
+#
+# Parses lines in input file
+#
+
 from pyparsing import *
 import sys
 import numpy as np

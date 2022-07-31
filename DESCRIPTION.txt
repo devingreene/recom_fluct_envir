@@ -1,24 +1,23 @@
 This software simulates a Darwinian process of evolving genotypes.
-Each genotype is represented by a bit string.  The fitness of a
-genotype is determined by the number of '1's in a bit string.  The
-process is driven by a stochastically fluctuating ``environment''
-variable, whose value corresponds to the ideal number of '1's in a
-genotype.  Some genotypes may do recombination, mimicking a biological
-process of swapping genetic material.  Here, bits are swapped.
+The process is driven by a stochastically fluctuating ``environment''
+variable.  Some genotypes may recombine with others, mimicking the well-known
+biological process of swapping genetic material.
 
 I used Python for parsing parameters and creating plots.  The main
 engine of simulating evolution comes from the C program
-\textit{tree.c}.  A brief technical description of this program
+tree.c.  A brief technical description of this program
 follows.
 
-The basic unit used in \textit{tree.c} is the \texttt{node} structure.
+The basic unit used in tree.c is the node structure.
 
 struct node
 {
+    /* Bit string representing genotype */
     bitstr bs;
-    uint32 n;
+    /* n is the number of this genotype in the population */
+    uint32 n; 
     /* Nodes are either in the cache or in the tree,
-     * never both, so unionize */
+     * never both, so unionize. */
     union
     {
         struct node *left;
@@ -28,29 +27,20 @@ struct node
     struct node *right;
 };
 
-\texttt{bitstr} is the bit string representing the genotype,
-\texttt{n} is the number of such genotypes present in the population,
-and \texttt{left} and \texttt{right} are present to allow placement in
-a binary tree.  The \texttt{next} element allows caching of currently
-unused nodes.
-
 An iterative step in the Darwinistic process begins with an array of
 ``parent'' nodes.  A ``child'' is selected by drawing randomly from
-this array, weighted by the value of \texttt{n}, or drawing two
-parents and recombining.  A binary tree
-structure keeps track of the child generation.  A new child is
-recorded by either:
+this array, weighted by the value of n, or drawing two parents and
+recombining.  A binary tree structure keeps track of the child
+generation.  A new child is recorded by either:
 
-\begin{enumerate}
-\item Incrementing \texttt{n} by one if the genotypes is already in
-the tree, or
-\item Inserting a new node.
-\end{enumerate}
+    - Incrementing n by one if the genotypes is already in
+    the tree, or
+    - Inserting a new node.
 
 After the tree is complete, it undergoes recursive destruction,
 forming the parent array for the next generation.
 
 To avoid excessive memory management related system calls or calls to
-\texttt{malloc} and \texttt{free}, temporarily unused nodes are placed
-in a linked list cache, which serves as a ``stack'' from which nodes
-can be pulled for reuse.
+malloc and free, temporarily unused nodes are placed in a linked list
+cache, which serves as a ``stack'' from which nodes can be pulled for
+reuse.

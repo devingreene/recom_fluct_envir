@@ -1,5 +1,7 @@
+-------------------------------------------------------------
 Exploring the effects of recombination on Darwinian evolution
 in a fluctuating environment.
+-------------------------------------------------------------
 
 `doit' is a Bash executable.  The command
 
@@ -18,3 +20,11 @@ An example input file, `input_file_example.txt', is included, which contains an
 explanation of the fields.
 
 For a slightly more technical description, see DESCRIPTION.txt.
+
+Prerequisites:
+
+    - C-libraries: GNU Scientific Library ("gsl")
+
+    - Python3: pyparsing, numpy, matplotlib
+
+    - Bash shell script interpreter

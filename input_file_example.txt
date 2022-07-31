@@ -18,7 +18,7 @@ mutation_rate 1e-4
 
 # Score for each allele.  The fitness of a genotype is given by 
 #
-#               fitness_discount^| sum_of_contributions - env |
+#               fitness_discount**abs(sum_of_contributions - env)
 #
 # The maximum environmental score is given by
 #
@@ -27,6 +27,8 @@ mutation_rate 1e-4
 mutation_contrib ( 0 1 ) ( 1 0 ) ( 2 2 )
 
 # Rate at which sex allele mutates
+# A single value implies a constant rate of mutation for all from/to
+# pairs.  Use a matrix for more fine-tuned mutation rates.
 sex_mutation_rate 1e-4
 
 number_of_asex_individuals 2

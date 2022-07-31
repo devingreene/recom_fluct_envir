@@ -1,11 +1,13 @@
 #!/bin/bash
 
-#set -xu
+set -eu
 
 TMPFILE=`mktemp`
+trap "/bin/rm -f $TMPFILE" ERR EXIT
+
 found_ddash=false
 file=/dev/null
-usage="./doit [ --dump ] \"parseable file\""
+usage="./doit [ --dump ] parseable-file"
 exec="./parse_results_plot.py $@"
 if [ $# -eq 0 ]
 then
@@ -39,4 +41,3 @@ done
 
 ./parserun.py $@ < "$file" > $TMPFILE
 if [ $? = 0 ] ; then $exec < $TMPFILE ; else false ; fi
-rm -f $TMPFILE

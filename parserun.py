@@ -29,6 +29,7 @@ nl_pattern = key("number_of_loci") + to_int
 na_pattern = key("number_of_alleles") + to_int
 mr_pattern = (Literal("mutation_rate") + Optional(":")).setParseAction(lambda s,loc,toks: s[len(toks[0]):])
 mc_pattern = (Literal("mutation_contrib") + Optional(":")).setParseAction(lambda s,loc,toks: s[len(toks[0]):])
+trts_pattern =(Literal("traits") + Optional(":")).setParseAction(lambda s,loc,toks: s[len(toks[0]):])
 smr_pattern = key("sex_mutation_rate") + to_float
 nai_pattern = key("number_of_asex_individuals") + to_int
 nit_pattern = key("number_of_iterations") + to_int
@@ -42,6 +43,7 @@ try:
     na = na_pattern.parseString(next(stdin),parseAll=True)[0]
     mr = mr_pattern.parseString(next(stdin))[0].strip()
     mc = mc_pattern.parseString(next(stdin))[0].strip()
+    trts = trts_pattern.parseString(next(stdin))[0].strip()
     smr = smr_pattern.parseString(next(stdin),parseAll=True)[0]
     nai = nai_pattern.parseString(next(stdin),parseAll=True)[0]
     nsi = nsi_pattern.parseString(next(stdin),parseAll=True)[0]
@@ -66,6 +68,7 @@ exec_args = ["./exec",str(nl),
                       str(nsi),
                       str(mr),
                       str(mc),
+                      str(trts),
                       str(smr),
                       m,
                       str(nit)]

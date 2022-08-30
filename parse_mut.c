@@ -3,6 +3,7 @@
 #include<ctype.h>
 #include<math.h>
 #include<limits.h>
+#include<assert.h>
 #include "this.h"
 
 /*
@@ -45,7 +46,10 @@
 
 extern double *mutation_rate;
 extern uint32 *mutation_contrib;
+extern uint32 *traits;
+extern uint32 ntraits;
 extern uint32 nalleles;
+extern uint32 nloci;
 
 void parse_rates(char *s)
 {
@@ -216,4 +220,34 @@ token:
     for(i = 0 ; i < nalleles ; i++)
         if(mutation_contrib[i] == UINT_MAX)
             PARSE_ERROR("Allele index %u not filled in\n",i);
+}
+
+/* Parse space separated list of integers */
+void parse_traits(char *s)
+{
+    char *ptr = s;
+    char *optr;
+    uint32 v;
+
+    ntraits = 0;
+
+    traits = malloc(sizeof(uint32)*0x100);
+    while(1)
+    {
+        optr = ptr;
+        v = (uint32)strtol(ptr,&ptr,0);
+        /* Boundaries must be monotonic */
+        assert( ! ntraits || v >= traits[ntraits - 1] );
+        /* Ignore boundaries beyond last locus */
+        if( v >= nloci ) break;
+        if(optr != ptr)
+        {
+            traits[ntraits] = v;
+            ntraits++;
+            assert(ntraits < 0x100);
+        }
+        else
+            break;
+    }
+    ntraits++;
 }

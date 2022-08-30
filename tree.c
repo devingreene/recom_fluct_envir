@@ -45,12 +45,13 @@
 
 extern void parse_rates(char *s);
 extern void parse_contrib(char *s);
+extern void parse_traits(char *s);
 
 typedef struct _bitstr
 {
     uint64 *bits;
     /* weight is not initialized until inserted into tree */
-    uint32 weight;
+    double weight;
 } bitstr ;
 
 /* Globals set by cmdline arguments */
@@ -71,7 +72,10 @@ uint32 nalleles;
 uint32 allele_size;
 uint64 allele_mask;
 
-uint32 maximum_weight;
+uint32 *traits;
+uint32 ntraits;
+
+double maximum_weight;
 double env;
 
 /* Global for location of sexuals */
@@ -82,14 +86,29 @@ void mutate(bitstr bs);
 int bitprint(uint64 *bits,int nl);
 
 /* Bitstring operations */
-uint32 weight(uint64 *bits)
+double weight(uint64 *bits)
 {
-    uint32 i,j,res = 0;
+    uint32 i,j;
+    uint32 allelei = 0;
+    uint32 trti = 0;
+    double res = 0.0;
+    double prt = 0.0;
     uint64 s;
     for(i = 0; i < nwords; i++)
-        for(j = 0, s = bits[i]; j < FULLORPART(i); j += allele_size, s >>= allele_size)
-            res += mutation_contrib[s & allele_mask];
-    return res;
+        for(j = 0, s = bits[i];
+                j < FULLORPART(i);
+                allelei++, j += allele_size, s >>= allele_size)
+        {
+            if(trti < ntraits - 1 && allelei == traits[trti])
+            {
+                /* Trait boundary found. Update accordingly. */
+                trti++;
+                res += prt*prt;
+                prt = 0.0;
+            }
+            prt += mutation_contrib[s & allele_mask];
+        }
+    return sqrt(res);
 }
 
 int cmp(bitstr b1, bitstr b2)
@@ -283,9 +302,9 @@ void plinearize_and_tally_weights(struct node **pcursor)
             found_sex = array.len;
         append_array(cursor);
         if(found_sex >= 0)
-            sex_weights[cursor->bs.weight] += cursor->n;
+            sex_weights[(uint32)(cursor->bs.weight)] += cursor->n;
         else
-            no_sex_weights[cursor->bs.weight] += cursor->n ;
+            no_sex_weights[(uint32)(cursor->bs.weight)] += cursor->n ;
         putnode(cursor);
     }
 }
@@ -294,8 +313,8 @@ void linearize_and_tally_weights(void)
 {
     array.len = 0;
     found_sex = -1;
-    memset(no_sex_weights,0,(maximum_weight + 1)*sizeof(int));
-    memset(sex_weights,0,(maximum_weight + 1)*sizeof(int));
+    memset(no_sex_weights,0,((uint32)maximum_weight + 1)*sizeof(int));
+    memset(sex_weights,0,((uint32)maximum_weight + 1)*sizeof(int));
     plinearize_and_tally_weights(&tree.root);
     assert(!tree.root);
 }
@@ -422,7 +441,7 @@ void pick_new_env(void)
         env = cand;
 }
 
-/* Mutation data structures */
+/* Mutation functions */
 
 void initialize_mutation_parameters(char *argv[])
 {
@@ -431,6 +450,8 @@ void initialize_mutation_parameters(char *argv[])
 
     mutation_contrib = malloc(sizeof(uint32)*nalleles);
     parse_contrib(argv[9]);
+
+    parse_traits(argv[10]);
 
     mutant_tables = malloc(sizeof(*mutant_tables)*nalleles);
     uint32 i;
@@ -442,7 +463,21 @@ void initialize_mutation_parameters(char *argv[])
     uint32 max = 0; 
     for(i = 0 ; i < nalleles ; i++)
         max = mutation_contrib[i] > max?mutation_contrib[i]:max;
-    maximum_weight = max*nloci;
+
+    uint32 prev = 0;
+    double psum = 0.;
+    double summand;
+    for(i = 0 ; i < ntraits - 1 ; i++)
+    {
+        summand = traits[i] - prev;
+        psum += summand*summand;
+        prev = traits[i];
+    }
+
+    summand = nloci - prev;
+    psum += summand*summand; 
+
+    maximum_weight = max*sqrt(psum);
 }
 
 void mutate(bitstr bs)
@@ -488,13 +523,14 @@ int main(int argc, char *argv[])
                 "   sex \\\n"
                 "   mutation_rate \\\n"
                 "   mutation_contrib \\\n"
+                "   traits \\\n"
                 "   sex_mutation_rate \\\n"
                 "   sex_change \\\n"
-                "   [ ngen ]\n");
+                "   ngen\n");
         exit(0);
     }
 
-    if(argc != 13)
+    if(argc != 14)
         INVALID(1,"Wrong number of arguments\n");
 
     bitstr bs;
@@ -517,12 +553,12 @@ int main(int argc, char *argv[])
     uint32 nosex = (uint32)strtoul(argv[6],NULL,0);
     uint32 sex = (uint32)strtoul(argv[7],NULL,0);
 
-    sex_mutation_rate = strtod(argv[10],NULL);
-    sex_change = !!strtol(argv[11],NULL,0);
+    sex_mutation_rate = strtod(argv[11],NULL);
+    sex_change = !!strtol(argv[12],NULL,0);
 
     initialize_mutation_parameters(argv);
 
-    uint32 ngen = (uint32)strtoul(argv[12],NULL,0);
+    uint32 ngen = (uint32)strtoul(argv[13],NULL,0);
 
     /* allele fit in windows of 2,4,8,16,32 or 64 bits */
     assert(nalleles >= 2);
@@ -557,8 +593,8 @@ int main(int argc, char *argv[])
     uint32 *choices = malloc(sizeof(uint32)*((nloci + bitspint - 1)/bitspint));
     uint32 choices_ints = (nloci + bitspint - 1)/bitspint;
 
-    no_sex_weights = malloc((maximum_weight + 1)*sizeof(uint32));
-    sex_weights = malloc((maximum_weight + 1)*sizeof(uint32));
+    no_sex_weights = malloc(((uint32)maximum_weight + 1)*sizeof(uint32));
+    sex_weights = malloc(((uint32)maximum_weight + 1)*sizeof(uint32));
 
     env = maximum_weight/2;
 

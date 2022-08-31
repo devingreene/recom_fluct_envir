@@ -501,9 +501,15 @@ void initialize_sex_weights(void)
     sex_weights = malloc((maximum_weight + 1)*sizeof(uint32));
 }
 
+void unittests(void);
 
 int main(int argc, char *argv[])
 {
+    if(argc ==2 && !strcmp(argv[1],"unittests"))
+    {
+        unittests();
+        exit(0);
+    }
     if(argc == 2 && !strcmp(argv[1],"--usage"))
     {
         fprintf(stderr,
@@ -624,4 +630,85 @@ int main(int argc, char *argv[])
     }
     printf("\n");
     return 0;
+}
+
+void unittests(void)
+{
+    nloci = 52;
+    nalleles = 5;
+
+    /* Check basic bit string functions */
+    setBitParameters();
+    assert( nwords == 4 );
+    assert( allele_size == 4 );
+    assert( allele_mask == 0x0f );
+    assert( residual == 16 );
+
+    uint64 *bits = calloc(sizeof(long)*nwords*2,1);
+    uint64 *bits2 = bits + nwords;
+
+    bits[3] = 0x00ff;bits[0] = (uint64)-1;
+    bits2[3] = 0x100ff;bits2[0] = (uint64)-1 - ( 0xffUL << 56 );
+
+    bitstr *bs = calloc(sizeof(bitstr),1);
+    bitstr *bs2 = calloc(sizeof(bitstr),1);
+
+    bs->bits = bits;
+    bs2->bits = bits2;
+    assert( cmp(*bs,*bs2) == 1 );
+    assert( cmp(*bs, *bs) == 0 );
+
+    assert(check_sex_bit(*bs) == 0);
+    assert(check_sex_bit(*bs2) == 1);
+
+    set_sex_bit(*bs);
+    assert(cmp(*bs,*bs2) == -1);
+
+    free(bits);free(bs);free(bs2);
+
+    /* Does tree collapse correctly? */
+
+    nindiv = 7;
+
+    typedef uint64 gtype[nwords];
+    gtype *gtypes = malloc(sizeof(gtype)*nindiv);
+
+    uint32 perm[] = { 4,1,2,0,3,5,6};
+
+    uint32 mc[] = { 0,1,2,3,4 };
+    mutation_contrib = malloc(sizeof(uint32)*nalleles);
+    memcpy(mutation_contrib,mc,sizeof(uint32)*nalleles);
+
+    bitstr *indvs = malloc(sizeof(bitstr)*(nindiv));
+
+    uint i;
+    for(i = 0; i < nindiv; i++)
+    {
+        gtypes[i][0] = ((uint64)(i/5) << 4) + (uint64)(i % 5);
+        gtypes[i][1] = 0x0404040404040404;
+        gtypes[i][2] = 0x4040404040404040;
+        gtypes[i][3] = 0x0000000000010003;
+    }
+
+    assert(weight(gtypes[1]) == 1 + 32 + 32 + 3);
+
+    for(i = 0; i < nindiv; i++)
+        indvs[i].bits = gtypes[i];
+
+    for(i = 0 ; i < nindiv ; i++)
+        insert(indvs[perm[i]]);
+
+    initialize_array();
+    maximum_weight = ( nalleles - 1 )*nloci;
+    initialize_sex_weights();
+    discount = 1.01;env = 0.;
+    linearize_and_tally_weights();
+
+    assert( array.bs[0].weight == 67 );
+    assert( array.bs[1].weight == 68 );
+    assert( array.bs[2].weight == 69 );
+    assert( array.bs[3].weight == 70 );
+    assert( array.bs[4].weight == 71 );
+    assert( array.bs[5].weight == 68 );
+    assert( array.bs[6].weight == 69 );
 }

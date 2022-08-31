@@ -95,6 +95,7 @@ double weight(uint64 *bits)
     double prt = 0.0;
     uint64 s;
     for(i = 0; i < nwords; i++)
+    {
         for(j = 0, s = bits[i];
                 j < FULLORPART(i);
                 allelei++, j += allele_size, s >>= allele_size)
@@ -108,6 +109,8 @@ double weight(uint64 *bits)
             }
             prt += mutation_contrib[s & allele_mask];
         }
+    }
+    res += prt*prt;
     return sqrt(res);
 }
 

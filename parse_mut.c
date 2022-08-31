@@ -236,18 +236,13 @@ void parse_traits(char *s)
     {
         optr = ptr;
         v = (uint32)strtol(ptr,&ptr,0);
+        if(v >= nloci || optr == ptr) break;
         /* Boundaries must be monotonic */
-        assert( ! ntraits || v >= traits[ntraits - 1] );
         /* Ignore boundaries beyond last locus */
-        if( v >= nloci ) break;
-        if(optr != ptr)
-        {
-            traits[ntraits] = v;
-            ntraits++;
-            assert(ntraits < 0x100);
-        }
-        else
-            break;
+        assert( ! ntraits || v >= traits[ntraits - 1] );
+        traits[ntraits] = v;
+        ntraits++;
+        assert(ntraits < 0x100);
     }
     ntraits++;
 }

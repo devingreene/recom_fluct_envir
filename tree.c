@@ -495,6 +495,13 @@ void setBitParameters(void)
 
 }
 
+void initialize_sex_weights(void)
+{
+    no_sex_weights = malloc((maximum_weight + 1)*sizeof(uint32));
+    sex_weights = malloc((maximum_weight + 1)*sizeof(uint32));
+}
+
+
 int main(int argc, char *argv[])
 {
     if(argc == 2 && !strcmp(argv[1],"--usage"))
@@ -563,8 +570,7 @@ int main(int argc, char *argv[])
     uint32 *choices = malloc(sizeof(uint32)*((nloci + bitspint - 1)/bitspint));
     uint32 choices_ints = (nloci + bitspint - 1)/bitspint;
 
-    no_sex_weights = malloc((maximum_weight + 1)*sizeof(uint32));
-    sex_weights = malloc((maximum_weight + 1)*sizeof(uint32));
+    initialize_sex_weights();
 
     env = maximum_weight/2;
 

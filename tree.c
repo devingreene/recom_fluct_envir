@@ -511,6 +511,35 @@ void mutate(bitstr bs)
    }
 }
 
+void setBitParameters(void)
+{
+    /* allele fit in windows of 2,4,8,16,32 or 64 bits */
+    assert(nalleles >= 2);
+    allele_size = 0;
+    uint32 s = nalleles - 1;
+    while(s || bitspword % allele_size)
+    {
+        allele_size++;
+        s >>= 1;
+    }
+
+    INVALID(allele_size > bitspword,"Too many alleles\n")
+
+    allele_mask = (1UL << allele_size) - 1;
+
+    /* Extra padding for sex bit */
+    nwords = (nloci*allele_size/bitspword) + 1;
+    residual = (nloci*allele_size) % bitspword;
+
+}
+
+void initialize_sex_weights(void)
+{
+    no_sex_weights = malloc((maximum_weight + 1)*sizeof(uint32));
+    sex_weights = malloc((maximum_weight + 1)*sizeof(uint32));
+}
+
+
 int main(int argc, char *argv[])
 {
     if(argc == 2 && !strcmp(argv[1],"--usage"))
@@ -563,23 +592,7 @@ int main(int argc, char *argv[])
 
     uint32 ngen = (uint32)strtoul(argv[13],NULL,0);
 
-    /* allele fit in windows of 2,4,8,16,32 or 64 bits */
-    assert(nalleles >= 2);
-    allele_size = 0;
-    uint32 s = nalleles - 1;
-    while(s || bitspword % allele_size)
-    {
-        allele_size++;
-        s >>= 1;
-    }
-
-    INVALID(allele_size > bitspword,"Too many alleles\n")
-
-    allele_mask = (1UL << allele_size) - 1;
-
-    /* Extra padding for sex bit */
-    nwords = (nloci*allele_size/bitspword) + 1;
-    residual = (nloci*allele_size) % bitspword;
+    setBitParameters();
 
     nindiv = nosex + sex;
     INVALID(nindiv == 0,
@@ -596,8 +609,7 @@ int main(int argc, char *argv[])
     uint32 *choices = malloc(sizeof(uint32)*((nloci + bitspint - 1)/bitspint));
     uint32 choices_ints = (nloci + bitspint - 1)/bitspint;
 
-    no_sex_weights = malloc(((uint32)maximum_weight + 1)*sizeof(uint32));
-    sex_weights = malloc(((uint32)maximum_weight + 1)*sizeof(uint32));
+    initialize_sex_weights();
 
     env = maximum_weight/2;
 

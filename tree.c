@@ -669,12 +669,12 @@ void unittests(void)
 
     /* Does tree collapse correctly? */
 
-    nindiv = 7;
+    nindiv = 18;
 
     typedef uint64 gtype[nwords];
     gtype *gtypes = malloc(sizeof(gtype)*nindiv);
 
-    uint32 perm[] = { 4,1,2,0,3,5,6};
+    uint32 perm[] = { 9,17,4,16,1,8,14,15,2,10,12,7,11,0,3,5,6,13 };
 
     uint32 mc[] = { 0,1,2,3,4 };
     mutation_contrib = malloc(sizeof(uint32)*nalleles);
@@ -685,10 +685,10 @@ void unittests(void)
     uint i;
     for(i = 0; i < nindiv; i++)
     {
-        gtypes[i][0] = ((uint64)(i/5) << 4) + (uint64)(i % 5);
+        gtypes[i][0] = ((uint64)(i/nalleles) << allele_size) + (uint64)(i % nalleles);
         gtypes[i][1] = 0x0404040404040404;
         gtypes[i][2] = 0x4040404040404040;
-        gtypes[i][3] = 0x0000000000010003;
+        gtypes[i][3] = (i % 2)?0x10003:0x3;
     }
 
     assert(weight(gtypes[1]) == 1 + 32 + 32 + 3);
@@ -702,16 +702,28 @@ void unittests(void)
     initialize_array();
     maximum_weight = ( nalleles - 1 )*nloci;
     initialize_sex_weights();
-    discount = 1.01;env = 0.;
+    discount = 1.01;env = 70.0;
     linearize_and_tally_weights();
+#define A(n,sex) (pow(discount, fabs((n) - env))*((sex)?1:2))
 
-    assert( array.bs[0].weight == 67 );
-    assert( array.bs[1].weight == 68 );
-    assert( array.bs[2].weight == 69 );
-    assert( array.bs[3].weight == 70 );
-    assert( array.bs[4].weight == 71 );
-    assert( array.bs[5].weight == 68 );
-    assert( array.bs[6].weight == 69 );
+    assert( array.w[0] == A(67,0) );
+    assert( array.w[1] == A(69,0) );
+    assert( array.w[2] == A(71,0) );
+    assert( array.w[3] == A(69,0) );
+    assert( array.w[4] == A(71,0) );
+    assert( array.w[5] == A(69,0) );
+    assert( array.w[6] == A(71,0) );
+    assert( array.w[7] == A(73,0) );
+    assert( array.w[8] == A(71,0) );
+    assert( array.w[9] == A(68,1) );
+    assert( array.w[10] == A(70,1) );
+    assert( array.w[11] == A(68,1) );
+    assert( array.w[12] == A(70,1) );
+    assert( array.w[13] == A(72,1) );
+    assert( array.w[14] == A(70,1) );
+    assert( array.w[15] == A(72,1) );
+    assert( array.w[16] == A(70,1) );
+    assert( array.w[17] == A(72,1) );
 
     free(gtypes);
     free(indvs);

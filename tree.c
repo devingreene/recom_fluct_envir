@@ -508,6 +508,7 @@ int main(int argc, char *argv[])
     if(argc ==2 && !strcmp(argv[1],"unittests"))
     {
         unittests();
+        printf("\nAll tests passed\n");
         exit(0);
     }
     if(argc == 2 && !strcmp(argv[1],"--usage"))
@@ -711,4 +712,71 @@ void unittests(void)
     assert( array.bs[4].weight == 71 );
     assert( array.bs[5].weight == 68 );
     assert( array.bs[6].weight == 69 );
+
+    free(gtypes);
+    free(indvs);
+
+    /* parsers */
+    nloci = 1;
+    nalleles = 3;
+    setBitParameters();
+    mutation_rate = malloc(sizeof(double)*nalleles*nalleles);
+    char *s = "(0.125 0.625 0.125)"
+              "(0.125 0.5 0.25)"
+              "(0.25 0.75 0.25)";
+    parse_rates(s);
+    assert( mutation_rate[0] ==  0.25 );
+    assert( mutation_rate[4] == 0.625 );
+    assert( mutation_rate[7] == 0.75  );
+
+    char *t = "(0 1) (2 2) (1 3)";
+    free(mutation_contrib);
+    mutation_contrib = malloc(sizeof(uint32)*3);
+    parse_contrib(t);
+    assert( mutation_contrib[0] == 1 );
+    assert( mutation_contrib[1] == 3 );
+    assert( mutation_contrib[2] == 2 );
+
+    /* Visual display of distribution of env values */
+    nloci = 80;
+    nalleles = 2;
+    setBitParameters();
+    free(mutation_contrib);
+    mutation_contrib = malloc(sizeof(uint32)*2);
+    parse_contrib("(0 0) (1 1)");
+    maximum_weight = nloci;
+    shift_size = 1.0;
+    env = maximum_weight/2.0;
+    initialize_rng();
+
+    int *freq = calloc((nloci + 1),sizeof(int));
+    for(i = 0 ; i < 10000 ; i++)
+    {
+        freq[(uint32)env]++;
+        pick_new_env();
+    }
+
+    int mode = 0;
+    for(i = 0; i <= nloci ; i++)
+        mode = (freq[i] > mode)?freq[i]:mode;
+
+    mode /= 15;
+
+    int j,k;
+    for(j = mode; j >= 0; j--)
+    {
+        for(k=0 ; k <= (int)nloci ; k++)
+        {
+            if(freq[k]/15 >= j)
+                printf("*");
+            else
+                printf(" ");
+        }
+        printf("\n");
+    }
+    printf("Visual display of distribution of env values\n"
+            "(10000 samples, 80 loci, vertical axis scaled)\n");
+    free(freq);
+    free(mutation_contrib);
+    free(mutation_rate);
 }

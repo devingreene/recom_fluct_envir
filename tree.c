@@ -378,7 +378,7 @@ void make_children(uint64 *scratch1,uint32 *choices, uint32 choices_ints)
         }
         /* Assert that double checks that bits more significant
          * than sex bit are zero */
-        assert(( res.bits[nwords-1] & (uint64)(-1UL) << (residual + 1) )  == 0);
+        assert(( res.bits[nwords-1] & ( (uint64)(-1UL) << (residual + 1) ) )  == 0);
 
         mutate(res);
         insert(res);
@@ -526,7 +526,7 @@ int main(int argc, char *argv[])
                 "   mutation_contrib \\\n"
                 "   sex_mutation_rate \\\n"
                 "   sex_change \\\n"
-                "   [ ngen ]\n");
+                "   ngen\n");
         exit(0);
     }
 

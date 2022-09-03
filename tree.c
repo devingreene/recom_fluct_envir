@@ -66,7 +66,7 @@ double weight(uint64 *bits)
                 j < FULLORPART(i);
                 allelei++, j += allele_size, s >>= allele_size)
         {
-            if(trti < ntraits - 1 && allelei == traits[trti])
+            if(trti + 1 < ntraits && allelei == traits[trti])
             {
                 /* Trait boundary found. Update accordingly. */
                 trti++;

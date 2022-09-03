@@ -70,6 +70,7 @@ uint32 *sex_weights;
 
 void parse_rates(char *s);
 void parse_contrib(char *s);
+void parse_traits(char *s);
 
 uint32 *traits;
 uint32 ntraits;
@@ -121,10 +122,6 @@ int main()
     mutation_contrib = malloc(sizeof(uint32)*nalleles);
     memcpy(mutation_contrib,mc,sizeof(uint32)*nalleles);
 
-    uint32 static_traits[] = { 13, 26, 39 };
-    traits = &static_traits[0];
-    ntraits = 4;
-
     bitstr *indvs = malloc(sizeof(bitstr)*(nindiv));
 
     uint i;
@@ -142,7 +139,14 @@ int main()
     gtypes[i][2] = gtypes[i-1][2];
     gtypes[i][3] = gtypes[i-1][3];
 
-    assert(weight(gtypes[1]) == sqrt(1.0*1.0 + 20.0*20.0 + 24.0*24.0 + 23.0*23.0));
+    /* Does parse_traits work correctly? */
+    parse_traits(" 13 26 39 ");
+    assert( traits[0] == 13
+            && traits[1] == 26
+            && traits[2] == 39 );
+    assert( ntraits == 4 );
+
+    assert( weight(gtypes[1]) == sqrt(1.0*1.0 + 20.0*20.0 + 24.0*24.0 + 23.0*23.0) );
 
     for(i = 0; i < nindiv; i++)
         indvs[i].bits = gtypes[i];
@@ -156,7 +160,6 @@ int main()
     discount = 1.01;env = 70.0;
     linearize_and_tally_weights();
 #define A(n,sex) (pow(discount, fabs((n) - env))*((sex)?1:2))
-// sqrt(1.0*1.0 + 20.0*20.0 + 24.0*24.0 + 23.0*23.0)
     assert( array.w[0] == A(sqrt(0.0*0.0 + 20.0*20.0 + 24.0*24.0 + 23.0*23.0),0) );
     assert( array.w[1] == A(sqrt(2.0*2.0 + 20.0*20.0 + 24.0*24.0 + 23.0*23.0),0) );
     assert( array.w[2] == A(sqrt(4.0*4.0 + 20.0*20.0 + 24.0*24.0 + 23.0*23.0),0) );
@@ -175,6 +178,34 @@ int main()
     assert( array.w[15] == A(sqrt(5.0*5.0 + 20.0*20.0 + 24.0*24.0 + 23.0*23.0),1) );
     assert( array.w[16] == A(sqrt(3.0*3.0 + 20.0*20.0 + 24.0*24.0 + 23.0*23.0),1) );
     assert( array.w[17] == 2*A(sqrt(5.0*5.0 + 20.0*20.0 + 24.0*24.0 + 23.0*23.0),1) );
+
+    /* Empty string for traits? */
+    free(traits);
+    parse_traits("");
+    assert( ntraits == 1 );
+
+    for(i = 0 ; i < nindiv ; i++)
+        insert(indvs[perm[i]]);
+
+    linearize_and_tally_weights();
+    assert( array.w[0] == A(67,0) );
+    assert( array.w[1] == A(69,0) );
+    assert( array.w[2] == A(71,0) );
+    assert( array.w[3] == A(69,0) );
+    assert( array.w[4] == A(71,0) );
+    assert( array.w[5] == A(69,0) );
+    assert( array.w[6] == A(71,0) );
+    assert( array.w[7] == A(73,0) );
+    assert( array.w[8] == A(71,0) );
+    assert( array.w[9] == A(68,1) );
+    assert( array.w[10] == A(70,1) );
+    assert( array.w[11] == A(68,1) );
+    assert( array.w[12] == A(70,1) );
+    assert( array.w[13] == A(72,1) );
+    assert( array.w[14] == A(70,1) );
+    assert( array.w[15] == A(72,1) );
+    assert( array.w[16] == A(70,1) );
+    assert( array.w[17] == 2*A(72,1) );
 
     free(gtypes);
     free(indvs);
@@ -246,6 +277,7 @@ int main()
     free(freq);
     free(mutation_contrib);
     free(mutation_rate);
+    free(traits);
 
     env = maximum_weight/2.0;
     shift_size = 7.5; // Large SD
@@ -254,6 +286,8 @@ int main()
      * */
     for(i = 1000000; i; i--)
         pick_new_env();
+
+    gsl_rng_free(rng);
     
     /* TODO
      * Recombination, among other things

@@ -3,7 +3,6 @@
 #include<string.h>
 #include<math.h>
 #include<assert.h>
-#include<limits.h>
 
 #if MACOSX
 #include<fcntl.h>
@@ -16,43 +15,6 @@
 #include<gsl/gsl_randist.h>
 
 #include "this.h"
-
-#define bitspword (uint32)(8*sizeof(uint64))
-#define bitspint  (uint32)(8*sizeof(uint32))
-
-#define INVALID(cond,args,...) \
-{ \
-    if((cond)) \
-    { \
-        fprintf(stderr,args,##__VA_ARGS__); \
-        exit(1); \
-    } \
-}
-
-#define INVALID_ARG(cond,name,arg) \
-    if((cond)) \
-    { \
-        fprintf(stderr,"Invalid value for " #name ": %s\n",arg); \
-        exit(1); \
-    }
-
-#define FULLORPART(_i) \
-    ( \
-      (_i) == nwords - 1?residual:bitspword \
-    ) 
-
-#define ENVELOPE_DEGREE (6)
-
-extern void parse_rates(char *s);
-extern void parse_contrib(char *s);
-extern void parse_traits(char *s);
-
-typedef struct _bitstr
-{
-    uint64 *bits;
-    /* weight is not initialized until inserted into tree */
-    double weight;
-} bitstr ;
 
 /* Globals set by cmdline arguments */
 uint32 nloci;
@@ -80,6 +42,10 @@ double env;
 
 /* Global for location of sexuals */
 int found_sex = -1;
+
+void parse_rates(char *s);
+void parse_contrib(char *s);
+void parse_traits(char *s);
 
 /* Forward declarations */
 void mutate(bitstr bs);
@@ -281,7 +247,7 @@ void append_array(struct node* n)
     /* XXX */
     /* Necessary? */
     array.bs[array.len].weight = n->bs.weight;
-    array.w[array.len] = pow(discount,fabs((int)n->bs.weight - env))*n->n;
+    array.w[array.len] = pow(discount,fabs(n->bs.weight - env))*n->n;
     if(found_sex < 0) 
         /* Two-fold advantage */
         array.w[array.len] *= 2;
@@ -430,7 +396,7 @@ void pick_new_env(void)
             env = gsl_rng_uniform(rng) < 0.5?env:cand;
         else
             env = cand;
-        return;
+      goto Check;
     }
         
     double chance = there/here;
@@ -442,6 +408,8 @@ void pick_new_env(void)
 
     if(gsl_rng_uniform(rng) < chance)
         env = cand;
+Check:
+    assert( env >= 0 && env <= maximum_weight );
 }
 
 /* Mutation functions */
@@ -535,132 +503,6 @@ void setBitParameters(void)
 
 void initialize_sex_weights(void)
 {
-    no_sex_weights = malloc((maximum_weight + 1)*sizeof(uint32));
-    sex_weights = malloc((maximum_weight + 1)*sizeof(uint32));
-}
-
-
-int main(int argc, char *argv[])
-{
-    if(argc == 2 && !strcmp(argv[1],"--usage"))
-    {
-        fprintf(stderr,
-                "./exec \\\n"
-                "   nloci \\\n"
-                "   nalleles \\\n"
-                "   shift_rate \\\n"
-                "   shift_size \\\n"
-                "   discount \\\n"
-                "   nosex \\\n"
-                "   sex \\\n"
-                "   mutation_rate \\\n"
-                "   mutation_contrib \\\n"
-                "   traits \\\n"
-                "   sex_mutation_rate \\\n"
-                "   sex_change \\\n"
-                "   ngen\n");
-        exit(0);
-    }
-
-    if(argc != 14)
-        INVALID(1,"Wrong number of arguments\n");
-
-    bitstr bs;
-
-    nloci = (uint32)strtoul(argv[1],NULL,0);
-    INVALID_ARG(nloci == 0,nloci,argv[1]);
-
-    nalleles = (uint32)strtoul(argv[2],NULL,0);
-    INVALID_ARG(nalleles < 2,nalleles,argv[1]);
-
-    shift_rate = strtod(argv[3],NULL);
-    INVALID_ARG(shift_rate < 0 || shift_rate > 1,shift_rate,argv[2]);
-
-    shift_size = strtod(argv[4],NULL);
-    INVALID_ARG(shift_size < 0,shift_size,argv[3]);
-
-    discount = strtod(argv[5],NULL);
-    INVALID_ARG(discount < 0 || discount > 1,discount,argv[4]);
-
-    uint32 nosex = (uint32)strtoul(argv[6],NULL,0);
-    uint32 sex = (uint32)strtoul(argv[7],NULL,0);
-
-    sex_mutation_rate = strtod(argv[11],NULL);
-    sex_change = !!strtol(argv[12],NULL,0);
-
-    initialize_mutation_parameters(argv);
-
-    uint32 ngen = (uint32)strtoul(argv[13],NULL,0);
-
-    setBitParameters();
-
-    nindiv = nosex + sex;
-    INVALID(nindiv == 0,
-            "Invalid value for population size: nosex: %s, sex: %s\n",argv[6],argv[7]);
-
-    initialize_rng();
-    initialize_array();
-
-    /* Passed arrays for make_children */
-    uint64 *scratch = malloc(sizeof(uint64)*nwords);
-    /* Used in recombination: One bit per locus, rounded up to nearest whole
-     * number of ints - (nloci + bitspnt -1)/bitspint = # of ints needed to fit
-     * nloci bits */
-    uint32 *choices = malloc(sizeof(uint32)*((nloci + bitspint - 1)/bitspint));
-    uint32 choices_ints = (nloci + bitspint - 1)/bitspint;
-
-    initialize_sex_weights();
-
-    env = maximum_weight/2;
-
-    bs.bits = malloc(sizeof(uint64)*nwords);
-
-    /* Initialize a population randomly */
-    uint32 i,j,k;
-    size_t rand;
-    double *uniform = malloc(sizeof(double)*nalleles);
-
-    for(i = 0 ; i < nalleles ; i++)
-        uniform[i] = 1.;
-    gsl_ran_discrete_t *table = gsl_ran_discrete_preproc(nalleles,uniform);
-
-    for(i = 0; i < nindiv ; i++)
-    {
-        /* Initialize to zero so that 
-         *  - we can just xor alleles
-         *  - sex bit is MSB */
-        memset(bs.bits,0,sizeof(uint64)*nwords);
-        for(j = 0 ; j < nwords ; j++)
-        {
-            for(k = 0; k < FULLORPART(j); k += allele_size)
-            {
-                rand = gsl_ran_discrete(rng,table);
-                bs.bits[j] ^= rand << k;
-            }
-        }
-        if(i < sex)
-            set_sex_bit(bs);
-        insert(bs);
-    }
-    gsl_ran_discrete_free(table);
-    free(uniform);
-    free(bs.bits);
-
-    for(i = 0 ; i < ngen && (!i || printf("\n")); i++)
-    {
-        make_children(scratch,choices,choices_ints);
-
-        /* Print weights */
-        printf("env: %8.2f\n",env);
-        printf("  no_sex:");
-        for(j = 0 ; j <= maximum_weight; j++)
-            printf(" %u:%u",j,no_sex_weights[j]);
-        printf("\n     sex:");
-        for(j = 0 ; j <= maximum_weight; j++)
-            printf(" %u:%u",j,sex_weights[j]);
-
-        pick_new_env();
-    }
-    printf("\n");
-    return 0;
+    no_sex_weights = malloc(((uint32)maximum_weight + 1)*sizeof(uint32));
+    sex_weights = malloc(((uint32)maximum_weight + 1)*sizeof(uint32));
 }

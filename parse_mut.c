@@ -1,7 +1,6 @@
 #include<stdlib.h>
 #include<stdio.h>
 #include<ctype.h>
-#include<math.h>
 #include<limits.h>
 #include<assert.h>
 #include "this.h"
@@ -27,12 +26,6 @@
     PARSE_ERROR(fmt,##__VA_ARGS__) \
 }
 
-#define INVALID(fmt,...) \
-{ \
-    fprintf(stderr,fmt,##__VA_ARGS__); \
-    exit(1); \
-}
-
 #define GO() \
 { \
     while(isspace(*s2)) s2++; \
@@ -44,12 +37,12 @@
 #define ISLEFT(c) ( (c) == '(' || (c) == '[' )
 #define ISRIGHT(c) ( (c) == ')' || (c) == ']' )
 
-extern double *mutation_rate;
-extern uint32 *mutation_contrib;
-extern uint32 *traits;
-extern uint32 ntraits;
-extern uint32 nalleles;
-extern uint32 nloci;
+double *mutation_rate;
+uint32 *mutation_contrib;
+uint32 *traits;
+uint32 ntraits;
+uint32 nalleles;
+uint32 nloci;
 
 void parse_rates(char *s)
 {
@@ -134,8 +127,7 @@ void parse_rates(char *s)
     }
 
     for(i = 0 ; i < nalleles*nalleles ; i++)
-        if(mutation_rate[i] < 0)
-            INVALID("Inferred negative probability values\n");
+        INVALID((mutation_rate[i] < 0),"Inferred negative probability values\n");
 }
 
 void parse_contrib(char *s)

@@ -124,7 +124,7 @@ int main()
 
     bitstr *indvs = malloc(sizeof(bitstr)*(nindiv));
 
-    uint i;
+    uint32 i;
     for(i = 0; i < nindiv - 1; i++)
     {
         gtypes[i][0] = ((uint64)(i/nalleles) << allele_size) + (uint64)(i % nalleles);
@@ -179,36 +179,82 @@ int main()
     assert( array.w[16] == A(sqrt(3.0*3.0 + 20.0*20.0 + 24.0*24.0 + 23.0*23.0),1) );
     assert( array.w[17] == 2*A(sqrt(5.0*5.0 + 20.0*20.0 + 24.0*24.0 + 23.0*23.0),1) );
 
-    /* Empty string for traits? */
-    free(traits);
-    parse_traits("");
-    assert( ntraits == 1 );
+    /* Test "null" strings for traits */
 
-    for(i = 0 ; i < nindiv ; i++)
-        insert(indvs[perm[i]]);
+    uint32 round;
+    char *test_trait_string = (char*)malloc(0x100);;
+    for(round = 1; round <= 6; round++)
+    {
+        uint32 tntraits; // True number of traits
+        switch(round)
+        {
+            case 1:
+                {
+                    char ex[] = "";
+                    strncpy(test_trait_string,ex,sizeof(ex)+1);
+                    tntraits = 1;
+                }
+                break;
+            case 2:
+                {
+                    char ex[] = "60";
+                    strncpy(test_trait_string,ex,sizeof(ex)+1);
+                    tntraits = 1;
+                }
+                break;
+            case 3:
+                {
+                    char ex[] = "0";
+                    strncpy(test_trait_string,ex,sizeof(ex)+1);
+                    tntraits = 2;
+                }
+                break;
+            case 4:
+                {
+                    char ex[] = "  0  60";
+                    strncpy(test_trait_string,ex,sizeof(ex)+1);
+                    tntraits = 2;
+                }
+                break;
+            case 5:
+                {
+                    char ex[] = "  ";
+                    strncpy(test_trait_string,ex,sizeof(ex)+1);
+                    tntraits = 1;
+                }
+        }
 
-    linearize_and_tally_weights();
-    assert( array.w[0] == A(67,0) );
-    assert( array.w[1] == A(69,0) );
-    assert( array.w[2] == A(71,0) );
-    assert( array.w[3] == A(69,0) );
-    assert( array.w[4] == A(71,0) );
-    assert( array.w[5] == A(69,0) );
-    assert( array.w[6] == A(71,0) );
-    assert( array.w[7] == A(73,0) );
-    assert( array.w[8] == A(71,0) );
-    assert( array.w[9] == A(68,1) );
-    assert( array.w[10] == A(70,1) );
-    assert( array.w[11] == A(68,1) );
-    assert( array.w[12] == A(70,1) );
-    assert( array.w[13] == A(72,1) );
-    assert( array.w[14] == A(70,1) );
-    assert( array.w[15] == A(72,1) );
-    assert( array.w[16] == A(70,1) );
-    assert( array.w[17] == 2*A(72,1) );
+        free(traits);
+        parse_traits(test_trait_string);
+        assert( ntraits == tntraits );
 
+        for(i = 0 ; i < nindiv ; i++)
+            insert(indvs[perm[i]]);
+
+        linearize_and_tally_weights();
+        assert( array.w[0] == A(67,0) );
+        assert( array.w[1] == A(69,0) );
+        assert( array.w[2] == A(71,0) );
+        assert( array.w[3] == A(69,0) );
+        assert( array.w[4] == A(71,0) );
+        assert( array.w[5] == A(69,0) );
+        assert( array.w[6] == A(71,0) );
+        assert( array.w[7] == A(73,0) );
+        assert( array.w[8] == A(71,0) );
+        assert( array.w[9] == A(68,1) );
+        assert( array.w[10] == A(70,1) );
+        assert( array.w[11] == A(68,1) );
+        assert( array.w[12] == A(70,1) );
+        assert( array.w[13] == A(72,1) );
+        assert( array.w[14] == A(70,1) );
+        assert( array.w[15] == A(72,1) );
+        assert( array.w[16] == A(70,1) );
+        assert( array.w[17] == 2*A(72,1) );
+
+    }
     free(gtypes);
     free(indvs);
+    free(test_trait_string);
 
     /* parsers */
     nloci = 1;

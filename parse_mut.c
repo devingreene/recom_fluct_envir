@@ -1,7 +1,4 @@
-#include<stdlib.h>
-#include<stdio.h>
 #include<ctype.h>
-#include<limits.h>
 #include "this.h"
 
 /*
@@ -29,8 +26,6 @@
 { \
     while(isspace(*s2)) s2++; \
 }
-
-
 
 #define ISDELIM(c) ( (c) == ')' || (c) == '(' || (c) == '[' || (c) == ']' )
 #define ISLEFT(c) ( (c) == '(' || (c) == '[' )

@@ -1,50 +1,10 @@
-#include<stdio.h>
-#include<stdlib.h>
-#include<string.h>
-#include<math.h>
-#include<assert.h>
-
-#if MACOSX
-#include<fcntl.h>
-#include<unistd.h>
-#endif
-
-#include<sys/random.h>
-
-#include<gsl/gsl_rng.h>
-#include<gsl/gsl_randist.h>
-
 #include "this.h"
+
+/* Marks index of first sexual */
+int found_sex = -1;
 
 void parse_rates(char *s);
 void parse_contrib(char *s);
-
-/* Globals set by cmdline arguments */
-uint32 nloci;
-double discount;
-double shift_rate;
-double shift_size;
-double *mutation_rate;
-uint32 *mutation_contrib;
-gsl_ran_discrete_t **mutant_tables;
-double sex_mutation_rate;
-uint32 sex_change;
-
-uint32 nindiv;
-uint32 nwords;
-uint32 residual;
-uint32 nalleles;
-uint32 allele_size;
-uint64 allele_mask;
-
-uint32 maximum_weight;
-double env;
-
-/* Global for location of sexuals */
-int found_sex = -1;
-
-/* Forward declarations */
-void mutate(bitstr bs);
 
 /* Bitstring operations */
 uint32 weight(uint64 *bits)
@@ -175,15 +135,6 @@ void insert(bitstr bs)
 
    *pcursor = new;
 }
-
-#define INITIAL_ARRAY_SIZE (0x1000)
-struct _array
-{
-    bitstr *bs;
-    double *w;
-    uint32 len;
-    uint32 space;
-} array;
 
 /* Array methods */
 

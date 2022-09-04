@@ -87,9 +87,6 @@ struct _array
     uint32 space;
 } array;
 
-/* Primary data structure for genotypes */
-struct node;
-
 /* Initializers */
 void initialize_array(void);
 void initialize_rng(void);

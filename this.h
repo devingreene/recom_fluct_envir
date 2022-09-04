@@ -74,7 +74,6 @@ uint32 allele_size;
 uint64 allele_mask;
 double maximum_weight;
 
-
 /* Environmental paramter */
 double env;
 
@@ -94,6 +93,7 @@ void initialize_rng(void);
 void initialize_mutation_parameters(char *argv[]);
 void initialize_sex_weights(void);
 void setBitParameters(void);
+void initialize_population(uint32 sex);
 
 /* Bitstring operations */
 int check_sex_bit(bitstr bs);

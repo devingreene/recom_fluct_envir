@@ -453,3 +453,39 @@ void initialize_sex_weights(void)
     no_sex_weights = malloc(((uint32)maximum_weight + 1)*sizeof(uint32));
     sex_weights = malloc(((uint32)maximum_weight + 1)*sizeof(uint32));
 }
+
+void initialize_population(uint32 sex)
+{
+    bitstr bs;
+    bs.bits = malloc(sizeof(uint64)*nwords);
+
+    /* Initialize a population randomly */
+    uint32 i,j,k;
+    size_t rand;
+    double *uniform = malloc(sizeof(double)*nalleles);
+
+    for(i = 0 ; i < nalleles ; i++) uniform[i] = 1.;
+    gsl_ran_discrete_t *table = gsl_ran_discrete_preproc(nalleles,uniform);
+
+    for(i = 0; i < nindiv ; i++)
+    {
+        /* Initialize to zero so that 
+         *  - we can just xor alleles
+         *  - sex bit is MSB */
+        memset(bs.bits,0,sizeof(uint64)*nwords);
+        for(j = 0 ; j < nwords ; j++)
+        {
+            for(k = 0; k < FULLORPART(j); k += allele_size)
+            {
+                rand = gsl_ran_discrete(rng,table);
+                bs.bits[j] ^= rand << k;
+            }
+        }
+        if(i < sex)
+            set_sex_bit(bs);
+        insert(bs);
+    }
+    gsl_ran_discrete_free(table);
+    free(uniform);
+    free(bs.bits);
+}

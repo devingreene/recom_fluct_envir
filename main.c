@@ -17,7 +17,7 @@ int main(int argc, char *argv[])
                 "   mutation_contrib \\\n"
                 "   sex_mutation_rate \\\n"
                 "   sex_change \\\n"
-                "   [ ngen ]\n");
+                "   ngen\n");
         exit(0);
     }
 
@@ -70,7 +70,7 @@ int main(int argc, char *argv[])
 
     initialize_sex_weights();
 
-    env = maximum_weight/2;
+    env = (double)maximum_weight/2;
 
     bs.bits = malloc(sizeof(uint64)*nwords);
 

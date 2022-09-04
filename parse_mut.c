@@ -31,10 +31,6 @@
 #define ISLEFT(c) ( (c) == '(' || (c) == '[' )
 #define ISRIGHT(c) ( (c) == ')' || (c) == ']' )
 
-double *mutation_rate;
-uint32 *mutation_contrib;
-uint32 nalleles;
-
 void parse_rates(char *s)
 {
     char *s2;

@@ -52,7 +52,7 @@ int main()
 
     bitstr *indvs = malloc(sizeof(bitstr)*(nindiv));
 
-    uint i;
+    uint32 i;
     for(i = 0; i < nindiv - 1; i++)
     {
         gtypes[i][0] = ((uint64)(i/nalleles) << allele_size) + (uint64)(i % nalleles);
@@ -135,25 +135,28 @@ int main()
     maximum_weight = nloci;
     shift_size = 1.0;
     env = maximum_weight/2.0;
-    initialize_rng();
 
-    int *freq = calloc((nloci + 1),sizeof(int));
-    for(i = 0 ; i < 10000 ; i++)
+    /* Casual prng */
+    rng = gsl_rng_alloc( gsl_rng_mt19937 );
+    gsl_rng_set(rng,0xdebb1eU);
+
+    uint32 *freq = calloc((nloci + 1),sizeof(int));
+    for(i = 10000 ; i; i--)
     {
         freq[(uint32)env]++;
         pick_new_env();
     }
 
-    int mode = 0;
+    uint32 mode = 0;
     for(i = 0; i <= nloci ; i++)
         mode = (freq[i] > mode)?freq[i]:mode;
 
     mode /= 15;
 
-    int j,k;
-    for(j = mode; j >= 0; j--)
+    uint32 j,k;
+    for(j = mode; j; j--)
     {
-        for(k=0 ; k <= (int)nloci ; k++)
+        for(k=0 ; k <= nloci ; k++)
         {
             if(freq[k]/15 >= j)
                 printf("*");

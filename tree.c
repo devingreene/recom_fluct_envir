@@ -175,7 +175,7 @@ void append_array(struct node* n)
     /* XXX */
     /* Necessary? */
     array.bs[array.len].weight = n->bs.weight;
-    array.w[array.len] = pow(discount,fabs((int)n->bs.weight - env))*n->n;
+    array.w[array.len] = pow(discount,fabs(n->bs.weight - env))*n->n;
     if(found_sex < 0) 
         /* Two-fold advantage */
         array.w[array.len] *= 2;
@@ -338,7 +338,7 @@ void pick_new_env(void)
         env = cand;
 }
 
-/* Mutation data structures */
+/* Mutation functions */
 
 void initialize_mutation_parameters(char *argv[])
 {

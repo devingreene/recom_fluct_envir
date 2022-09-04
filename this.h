@@ -93,6 +93,7 @@ void initialize_rng(void);
 void initialize_mutation_parameters(char *argv[]);
 void initialize_sex_weights(void);
 void setBitParameters(void);
+void initialize_population(uint32 sex);
 
 /* Bitstring operations */
 int check_sex_bit(bitstr bs);

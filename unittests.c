@@ -1,72 +1,4 @@
-#include<stdio.h>
-#include<stdlib.h>
-#include<string.h>
-#include<math.h>
-#include<assert.h>
-#include<limits.h>
-
-#if MACOSX
-#include<fcntl.h>
-#include<unistd.h>
-#endif
-
-#include<sys/random.h>
-
-#include<gsl/gsl_rng.h>
-#include<gsl/gsl_randist.h>
-
 #include "this.h"
-
-struct _array
-{
-    bitstr *bs;
-    double *w;
-    uint32 len;
-    uint32 space;
-} array;
-
-uint32 nloci;
-double discount;
-double shift_rate;
-double shift_size;
-double *mutation_rate;
-uint32 *mutation_contrib;
-gsl_ran_discrete_t **mutant_tables;
-double sex_mutation_rate;
-uint32 sex_change;
-
-struct node;
-
-/* Bitstring operations */
-int check_sex_bit(bitstr bs);
-void set_sex_bit(bitstr bs);
-void insert(bitstr bs) ;
-int cmp(bitstr b1, bitstr b2);
-
-void initialize_array(void);
-void initialize_rng(void);
-uint32 weight(uint64 *bits);
-void linearize_and_tally_weights(void);
-void make_children(uint64 *scratch1,uint32 *choices, uint32 choices_ints);
-void pick_new_env(void);
-void initialize_mutation_parameters(char *argv[]);
-void setBitParameters(void);
-void initialize_sex_weights(void);
-
-uint32 nindiv;
-uint32 nwords;
-uint32 residual;
-uint32 nalleles;
-uint32 allele_size;
-uint64 allele_mask;
-
-uint32 maximum_weight;
-double env;
-
-gsl_rng *rng;
-
-uint32 *no_sex_weights;
-uint32 *sex_weights;
 
 void parse_rates(char *s);
 void parse_contrib(char *s);
@@ -120,7 +52,7 @@ int main()
 
     bitstr *indvs = malloc(sizeof(bitstr)*(nindiv));
 
-    uint i;
+    uint32 i;
     for(i = 0; i < nindiv - 1; i++)
     {
         gtypes[i][0] = ((uint64)(i/nalleles) << allele_size) + (uint64)(i % nalleles);
@@ -203,25 +135,28 @@ int main()
     maximum_weight = nloci;
     shift_size = 1.0;
     env = maximum_weight/2.0;
-    initialize_rng();
 
-    int *freq = calloc((nloci + 1),sizeof(int));
-    for(i = 0 ; i < 10000 ; i++)
+    /* Casual prng */
+    rng = gsl_rng_alloc( gsl_rng_mt19937 );
+    gsl_rng_set(rng,0xdebb1eU);
+
+    uint32 *freq = calloc((nloci + 1),sizeof(int));
+    for(i = 10000 ; i; i--)
     {
         freq[(uint32)env]++;
         pick_new_env();
     }
 
-    int mode = 0;
+    uint32 mode = 0;
     for(i = 0; i <= nloci ; i++)
         mode = (freq[i] > mode)?freq[i]:mode;
 
     mode /= 15;
 
-    int j,k;
-    for(j = mode; j >= 0; j--)
+    uint32 j,k;
+    for(j = mode; j; j--)
     {
-        for(k=0 ; k <= (int)nloci ; k++)
+        for(k=0 ; k <= nloci ; k++)
         {
             if(freq[k]/15 >= j)
                 printf("*");

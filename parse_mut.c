@@ -1,7 +1,4 @@
-#include<stdlib.h>
-#include<stdio.h>
 #include<ctype.h>
-#include<limits.h>
 #include "this.h"
 
 /*
@@ -30,15 +27,9 @@
     while(isspace(*s2)) s2++; \
 }
 
-
-
 #define ISDELIM(c) ( (c) == ')' || (c) == '(' || (c) == '[' || (c) == ']' )
 #define ISLEFT(c) ( (c) == '(' || (c) == '[' )
 #define ISRIGHT(c) ( (c) == ')' || (c) == ']' )
-
-double *mutation_rate;
-uint32 *mutation_contrib;
-uint32 nalleles;
 
 void parse_rates(char *s)
 {

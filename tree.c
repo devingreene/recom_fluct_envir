@@ -217,10 +217,14 @@ void plinearize_and_tally_weights(struct node **pcursor)
         if(found_sex < 0 && sex_bit)
             found_sex = array.len;
         append_array(cursor);
+        uint32 idx = (uint32)(cursor->bs.weight + 0.5);
+
+        assert((double)idx <= maximum_weight);
+
         if(found_sex >= 0)
-            sex_weights[(uint32)(cursor->bs.weight)] += cursor->n;
+            sex_weights[idx] += cursor->n;
         else
-            no_sex_weights[(uint32)(cursor->bs.weight)] += cursor->n ;
+            no_sex_weights[idx] += cursor->n ;
         putnode(cursor);
     }
 }

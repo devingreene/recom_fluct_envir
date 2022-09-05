@@ -74,6 +74,8 @@ int main(int argc, char *argv[])
     initialize_population(sex);
 
     uint32 i,j;
+    printf("Maximum weight: %0.3f\nInitial env: %0.3f\n",
+            maximum_weight, env);
     for(i = 0 ; i < ngen && (!i || printf("\n")); i++)
     {
         make_children(scratch,choices,choices_ints);
@@ -81,10 +83,10 @@ int main(int argc, char *argv[])
         /* Print weights */
         printf("env: %8.2f\n",env);
         printf("  no_sex:");
-        for(j = 0; j <= (uint32)maximum_weight + 1; j++)
+        for(j = 0; j <= (uint32)maximum_weight; j++)
             printf(" %u:%u",j,no_sex_weights[j]);
         printf("\n     sex:");
-        for(j = 0; j <= (uint32)maximum_weight + 1; j++)
+        for(j = 0; j <= (uint32)maximum_weight; j++)
             printf(" %u:%u",j,sex_weights[j]);
 
         pick_new_env();

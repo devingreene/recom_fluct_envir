@@ -2,6 +2,11 @@
 
 set -eu
 
+if [ -f configV ]
+then
+    source configV
+fi
+
 TMPFILE=`mktemp`
 trap "/bin/rm -f $TMPFILE" ERR EXIT
 

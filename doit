@@ -7,8 +7,8 @@ then
     source configV
 fi
 
-TMPFILE=`mktemp`
-trap "/bin/rm -f $TMPFILE" ERR EXIT
+TMPFILE=`mktemp tmp.RECOM.XXXX`
+trap "/bin/rm -f $TMPFILE ${TMPFILE}.bk" ERR EXIT
 
 found_ddash=false
 file=/dev/null
@@ -48,6 +48,6 @@ done
 # Don't truncate for parse_results if exec is cat
 if [ "$exec" != cat ]
 then
-    sed -i "" "1,2d" "$TMPFILE"
+    sed -i.bk "1,2d" "$TMPFILE"
 fi
 if [ $? = 0 ] ; then $exec < $TMPFILE ; else false ; fi

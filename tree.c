@@ -33,20 +33,6 @@ int cmp(bitstr b1, bitstr b2)
     return 0;
 }
 
-void xor(uint64 *p, uint64 *q, uint64 *res)
-{
-    uint32 i;
-    for(i=0;i<nwords;i++)
-        res[i] = p[i]^q[i];
-}
-
-void xor_me(uint64 *p, uint64 *q)
-{
-    uint32 i;
-    for(i=0;i<nwords;i++)
-        p[i] ^= q[i];
-}
-
 /* Single data structure */
 struct node
 {

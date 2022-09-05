@@ -97,7 +97,7 @@ void putnode(struct node *n)
 /* Node and tree methods */
 
 /* bitstring weights are computed always and only here */
-struct node *getnode(bitstr bs)
+static struct node *getnode(bitstr bs)
 {
     struct node *n;
     if(ncache.head)
@@ -158,7 +158,7 @@ void initialize_array(void)
     array.space = INITIAL_ARRAY_SIZE;
 }
 
-void increase_array_space(void)
+static void increase_array_space(void)
 {
     array.bs = realloc(array.bs,sizeof(*array.bs)*array.space*2);
     array.w = realloc(array.w,sizeof(double)*array.space*2);
@@ -171,7 +171,7 @@ void increase_array_space(void)
     array.space *= 2;
 }
 
-void append_array(struct node* n)
+static void append_array(struct node* n)
 {
     if(array.len > (7*array.space)/8)
         increase_array_space();
@@ -192,7 +192,7 @@ void append_array(struct node* n)
 uint32 *no_sex_weights;
 uint32 *sex_weights;
 
-void plinearize_and_tally_weights(struct node **pcursor)
+static void plinearize_and_tally_weights(struct node **pcursor)
 {
     struct node* cursor;
     while((cursor = *pcursor))

@@ -200,3 +200,28 @@ token:
         if(mutation_contrib[i] == UINT_MAX)
             PARSE_ERROR("Allele index %u not filled in\n",i);
 }
+
+/* Parse space separated list of integers */
+void parse_traits(char *s)
+{
+    char *ptr = s;
+    char *optr;
+    uint32 v;
+
+    ntraits = 0;
+
+    traits = malloc(sizeof(uint32)*0x100);
+    while(1)
+    {
+        optr = ptr;
+        v = (uint32)strtol(ptr,&ptr,0);
+        if(v >= nloci || optr == ptr) break;
+        /* Boundaries must be monotonic */
+        /* Ignore boundaries beyond last locus */
+        assert( ! ntraits || v >= traits[ntraits - 1] );
+        traits[ntraits] = v;
+        ntraits++;
+        assert(ntraits < 0x100);
+    }
+    ntraits++;
+}

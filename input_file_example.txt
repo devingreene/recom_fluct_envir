@@ -10,21 +10,30 @@ shift_size 1
 # Factor of decrease for each unit of deviation from optimal fitness.
 fitness_discount 0.5
 
-number_of_loci 8
+number_of_loci 15
 number_of_alleles 3
 
 # Either a single number of a matrix
 mutation_rate 1e-4
 
-# Score for each allele.  The fitness of a genotype is given by 
+# Score for each allele.  If the genotype is divided into traits, each locus
+# contributes its allele's score to a sum:
 #
-#               fitness_discount**abs(sum_of_contributions - env)
+#   traitA_score = sum(allele contributions in trait A)
+# 
+# The total score of a genotype is given by 
 #
-# The maximum environmental score is given by
+#   total = sqrt(sum(trait*_score**2))
+# 
+# The fitness of a genotype depends in the current "temperature" (env).
 #
-#                   ( max contribution ) * nalleles
-#
-mutation_contrib ( 0 1 ) ( 1 0 ) ( 2 2 )
+#   fitness = fitness_discount**abs(total - env)
+mutation_contrib ( 0 0 ) ( 1 1 ) ( 2 2 )
+
+# Divide genotype into "traits".  Each integer is the initial index of a region.
+# See the description of mutation_contrib above for an explanation of how the
+# environmental score of a genotype is computed.
+traits 2 5 9 20
 
 # Rate at which sex allele mutates
 # A single value implies a constant rate of mutation for all from/to
@@ -35,3 +44,5 @@ number_of_asex_individuals 2
 number_of_sex_individuals 2000
 
 number_of_iterations 100
+
+# vim: tw=80 comments=b\:#

@@ -51,7 +51,7 @@ typedef struct _bitstr
 {
     uint64 *bits;
     /* weight is not initialized until inserted into tree */
-    uint32 weight;
+    double weight;
 } bitstr ;
 
 /* Globals set by cmdline arguments */
@@ -72,7 +72,7 @@ uint32 residual;
 uint32 nalleles;
 uint32 allele_size;
 uint64 allele_mask;
-uint32 maximum_weight;
+double maximum_weight;
 
 /* Environmental paramter */
 double env;
@@ -102,7 +102,7 @@ void insert(bitstr bs);
 int cmp(bitstr b1, bitstr b2);
 
 /* General functions */
-uint32 weight(uint64 *bits);
+double weight(uint64 *bits);
 void linearize_and_tally_weights(void);
 void make_children(uint64 *scratch1,uint32 *choices, uint32 choices_ints);
 void pick_new_env(void);
@@ -114,3 +114,6 @@ gsl_rng *rng;
 /* Arrays for output */
 uint32 *no_sex_weights;
 uint32 *sex_weights;
+
+uint32 *traits;
+uint32 ntraits;

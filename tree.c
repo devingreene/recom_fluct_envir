@@ -192,27 +192,35 @@ static void append_array(struct node* n)
 uint32 *no_sex_weights;
 uint32 *sex_weights;
 
-static void plinearize_and_tally_weights(struct node **pcursor)
+static void plinearize_and_tally_weights(struct node *cursor)
 {
-    struct node* cursor;
-    while((cursor = *pcursor))
-    {
-        plinearize_and_tally_weights(&cursor->left);
-        *pcursor = cursor->right;
-        int sex_bit = check_sex_bit(cursor->bs);
-        if(found_sex < 0 && sex_bit)
-            found_sex = array.len;
-        append_array(cursor);
-        uint32 idx = (uint32)(cursor->bs.weight + 0.5);
+    int sex_bit;
+    uint32 idx;
+    struct node *left,*right;
 
-        assert((double)idx <= maximum_weight);
+    if(cursor == NULL)
+        return;
 
-        if(found_sex >= 0)
-            sex_weights[idx] += cursor->n;
-        else
-            no_sex_weights[idx] += cursor->n ;
-        putnode(cursor);
-    }
+    left = cursor->left;
+    right = cursor->right;
+
+    plinearize_and_tally_weights(left);
+
+    sex_bit = check_sex_bit(cursor->bs);
+    if(found_sex < 0 && sex_bit)
+        found_sex = array.len;
+    append_array(cursor);
+    idx = (uint32)(cursor->bs.weight + 0.5);
+
+    assert((double)idx <= maximum_weight);
+
+    if(found_sex >= 0)
+        sex_weights[idx] += cursor->n;
+    else
+        no_sex_weights[idx] += cursor->n ;
+    putnode(cursor);
+
+    plinearize_and_tally_weights(right);
 }
 
 void linearize_and_tally_weights(void)
@@ -221,8 +229,8 @@ void linearize_and_tally_weights(void)
     found_sex = -1;
     memset(no_sex_weights,0,((uint32)maximum_weight + 1)*sizeof(int));
     memset(sex_weights,0,((uint32)maximum_weight + 1)*sizeof(int));
-    plinearize_and_tally_weights(&tree.root);
-    assert(!tree.root);
+    plinearize_and_tally_weights(tree.root);
+    tree.root = NULL;
 }
 
 gsl_rng *rng;

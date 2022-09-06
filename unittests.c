@@ -88,6 +88,7 @@ int main()
     initialize_sex_weights();
     discount = 1.01;env = 70.0;
     linearize_and_tally_weights();
+    assert(!tree.root)
 #define A(n,sex) (pow(discount, fabs((n) - env))*((sex)?1:2))
     assert( array.w[0] == A(sqrt(0.0*0.0 + 20.0*20.0 + 24.0*24.0 + 23.0*23.0),0) );
     assert( array.w[1] == A(sqrt(2.0*2.0 + 20.0*20.0 + 24.0*24.0 + 23.0*23.0),0) );

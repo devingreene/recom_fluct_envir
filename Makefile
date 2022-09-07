@@ -6,6 +6,8 @@ else
 	MACOSX := 0
 endif
 
+CFLAGS := -Wall -Werror -Wextra
+
 all: override CFLAGS += -O2
 all: exec unittests
 
@@ -14,12 +16,12 @@ clean:
 	rm exec unittests
 
 exec: parse_mut.c tree.c main.c recom_fluct_envir_many.h
-	$(CC) -DMACOSX=$(MACOSX) $(CFLAGS) -Wall -Wextra -o \
-		exec parse_mut.c tree.c main.c -lm -lgsl -lgslcblas
+	$(CC) -DMACOSX=$(MACOSX) $(CFLAGS) -o exec \
+		parse_mut.c tree.c main.c -lm -lgsl -lgslcblas
 
 unittests: parse_mut.c tree.c unittests.c recom_fluct_envir_many.h
-	$(CC) -DMACOSX=$(MACOSX) $(CFLAGS) -Wall -Wextra -o \
-		unittests parse_mut.c tree.c unittests.c -lm -lgsl -lgslcblas
+	$(CC) -DMACOSX=$(MACOSX) $(CFLAGS) -o unittests \
+		parse_mut.c tree.c unittests.c -lm -lgsl -lgslcblas
 
 gdb: override CFLAGS += -ggdb
 gdb: exec unittests

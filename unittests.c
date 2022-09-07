@@ -1,8 +1,8 @@
 #include "recom_fluct_envir_many.h"
 
-void parse_rates(char *s);
-void parse_contrib(char *s);
-void parse_traits(char *s);
+extern void parse_rates(char *s);
+extern void parse_contrib(char *s);
+extern void parse_traits(char *s);
 
 int main()
 {

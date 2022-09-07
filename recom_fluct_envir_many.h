@@ -55,29 +55,28 @@ typedef struct _bitstr
 } bitstr ;
 
 /* Globals set by cmdline arguments */
-uint32 nloci;
-double discount;
-double shift_rate;
-double shift_size;
-double *mutation_rate;
-uint32 *mutation_contrib;
-gsl_ran_discrete_t **mutant_tables;
-double sex_mutation_rate;
-uint32 sex_change;
+extern uint32 nloci;
+extern double discount;
+extern double shift_rate;
+extern double shift_size;
+extern double *mutation_rate;
+extern uint32 *mutation_contrib;
+extern gsl_ran_discrete_t **mutant_tables;
+extern double sex_mutation_rate;
+extern uint32 sex_change;
 
 /* Calculated paramters */
-uint32 nindiv;
-uint32 nwords;
-uint32 residual;
-uint32 nalleles;
-uint32 allele_size;
-uint64 allele_mask;
-double maximum_weight;
+extern uint32 nindiv;
+extern uint32 nwords;
+extern uint32 residual;
+extern uint32 nalleles;
+extern uint32 allele_size;
+extern uint64 allele_mask;
+extern double maximum_weight;
 
 /* Environmental paramter */
-double env;
+extern double env;
 
-/* Array for storing parental generation */
 #define INITIAL_ARRAY_SIZE (0x1000)
 struct _array
 {
@@ -88,32 +87,32 @@ struct _array
 } array;
 
 /* Initializers */
-void initialize_array(void);
-void initialize_rng(void);
-void initialize_mutation_parameters(char *argv[]);
-void initialize_sex_weights(void);
-void setBitParameters(void);
-void initialize_population(uint32 sex);
+extern void initialize_array(void);
+extern void initialize_rng(void);
+extern void initialize_mutation_parameters(char *argv[]);
+extern void initialize_sex_weights(void);
+extern void setBitParameters(void);
+extern void initialize_population(uint32 sex);
 
 /* Bitstring operations */
-int check_sex_bit(bitstr bs);
-void set_sex_bit(bitstr bs);
-void insert(bitstr bs);
-int cmp(bitstr b1, bitstr b2);
+extern int check_sex_bit(bitstr bs);
+extern void set_sex_bit(bitstr bs);
+extern void insert(bitstr bs);
+extern int cmp(bitstr b1, bitstr b2);
 
 /* General functions */
-double weight(uint64 *bits);
-void linearize_and_tally_weights(void);
-void make_children(uint64 *scratch1,uint32 *choices, uint32 choices_ints);
-void pick_new_env(void);
-void mutate(bitstr bs);
+extern double weight(uint64 *bits);
+extern void linearize_and_tally_weights(void);
+extern void make_children(uint64 *scratch1,uint32 *choices, uint32 choices_ints);
+extern void pick_new_env(void);
+extern void mutate(bitstr bs);
 
 /* GSL PRNG */
-gsl_rng *rng;
+extern gsl_rng *rng;
 
 /* Arrays for output */
-uint32 *no_sex_weights;
-uint32 *sex_weights;
+extern uint32 *no_sex_weights;
+extern uint32 *sex_weights;
 
-uint32 *traits;
-uint32 ntraits;
+extern uint32 *traits;
+extern uint32 ntraits;

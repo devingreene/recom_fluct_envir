@@ -1,11 +1,37 @@
 #include "recom_fluct_envir_many.h"
 
-/* Marks index of first sexual */
-int found_sex = -1;
+/* Globals set by cmdline arguments */
+uint32 nloci;
+double discount;
+double shift_rate;
+double shift_size;
+double *mutation_rate;
+uint32 *mutation_contrib;
+gsl_ran_discrete_t **mutant_tables;
+double sex_mutation_rate;
+uint32 sex_change;
 
-void parse_rates(char *s);
-void parse_contrib(char *s);
-void parse_traits(char *s);
+/* Calculated paramters */
+uint32 nindiv;
+uint32 nwords;
+uint32 residual;
+uint32 nalleles;
+uint32 allele_size;
+uint64 allele_mask;
+double maximum_weight;
+
+/* Environmental paramter */
+double env;
+
+/* Marks index of first sexual */
+static int found_sex = -1;
+
+extern void parse_rates(char *s);
+extern void parse_contrib(char *s);
+extern void parse_traits(char *s);
+
+uint32 *traits;
+uint32 ntraits;
 
 /* Bitstring operations */
 double weight(uint64 *bits)

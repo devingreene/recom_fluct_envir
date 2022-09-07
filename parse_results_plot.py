@@ -75,7 +75,7 @@ if "--ugly" in sys.argv[1:]:
 size = (a_arr[0] + s_arr[0]).sum()
 
 import os
-usetex = not ( os.getenv("MPL_text_usetex") in [ "False", "0" ] )
+usetex = os.getenv("MPL_text_usetex") not in [ "false", "False", "0" ]
 plt.rcParams.update({'font.family':'serif',
                      'font.sans-serif':'Palatino',
                      'text.usetex':usetex,

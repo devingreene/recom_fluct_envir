@@ -74,9 +74,11 @@ if "--ugly" in sys.argv[1:]:
 
 size = (a_arr[0] + s_arr[0]).sum()
 
+import os
+usetex = not ( os.getenv("MPL_text_usetex") in [ "False", "0" ] )
 plt.rcParams.update({'font.family':'serif',
                      'font.sans-serif':'Palatino',
-                     'text.usetex':True,
+                     'text.usetex':usetex,
                      'axes.prop_cycle':plt.rcParams['axes.prop_cycle'][:nbins]})
 
 plt.figure(figsize=(10,5),tight_layout=True)

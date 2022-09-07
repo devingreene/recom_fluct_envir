@@ -28,3 +28,10 @@ Prerequisites:
     - Python3: pyparsing, numpy, matplotlib
 
     - Bash shell script interpreter
+
+Configuration Problems:
+
+    - To turn off TeX in matplotlib, add the following line to your configV
+      file:
+
+            export MPL_text_usetex=0

@@ -22,9 +22,11 @@
     PARSE_ERROR(fmt,##__VA_ARGS__) \
 }
 
+#define ISSPACE(x) isspace((int)(x))
+
 #define GO() \
 { \
-    while(isspace(*s2)) s2++; \
+    while(ISSPACE(*s2)) s2++; \
 }
 
 #define ISDELIM(c) ( (c) == ')' || (c) == '(' || (c) == '[' || (c) == ']' )
@@ -87,10 +89,10 @@ void parse_rates(char *s)
                 GRAPH("Token out of set\n");
             if(row == col)
                 /* If diagonal element, skip word */
-                while(*s2 && !isspace(*s2) && !ISDELIM(*s2)) s2++;
+                while(*s2 && !ISSPACE(*s2) && !ISDELIM(*s2)) s2++;
             else
                 mutation_rate[INDEX(row,col)] = strtod(s2,&s2);
-            if(!isspace(*s2) && !ISRIGHT(*s2))
+            if(!ISSPACE(*s2) && !ISRIGHT(*s2))
                 GRAPH("Unexpected character or end\n");
             col++;
             if(col > (int)nalleles)
@@ -174,7 +176,7 @@ token:
             if(ep == s2)
                 GRAPH("Missing or invalid entry\n");
             s2 = ep;
-            if(!isspace(*s2) && !ISRIGHT(*s2))
+            if(!ISSPACE(*s2) && !ISRIGHT(*s2))
                 GRAPH("%s\n","Unexpected character or end");
             if(n >= nalleles)
                 GRAPH("No such allele\n");
@@ -188,7 +190,7 @@ token:
             if(*s2 == '-')
                 GRAPH("Negative contributions not accepted\n");
             s2 = ep;
-            if(!isspace(*s2) && !ISRIGHT(*s2))
+            if(!ISSPACE(*s2) && !ISRIGHT(*s2))
                 GRAPH("%s\n","Unexpected character or end");
             col++;
         }

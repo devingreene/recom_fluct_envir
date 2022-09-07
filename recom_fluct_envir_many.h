@@ -78,7 +78,7 @@ extern double maximum_weight;
 extern double env;
 
 #define INITIAL_ARRAY_SIZE (0x1000)
-struct _array
+extern struct _array
 {
     bitstr *bs;
     double *w;

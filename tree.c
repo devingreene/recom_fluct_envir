@@ -1,5 +1,7 @@
 #include "recom_fluct_envir_many.h"
 
+struct _array array;
+
 /* Globals set by cmdline arguments */
 uint32 nloci;
 double discount;

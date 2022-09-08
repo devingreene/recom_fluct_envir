@@ -29,9 +29,9 @@ Prerequisites:
 
     - Bash shell script interpreter
 
-Configuration Problems:
+Configuration Issues:
 
-    - To turn off TeX in matplotlib, add the following line to your configV
+    - To turn on TeX in matplotlib, add the following line to your configV
       file:
 
-            export MPL_text_usetex=0
+            export RFE_MPL_text_usetex=1

@@ -2,6 +2,7 @@
 from pyparsing import *
 import numpy as np
 import sys
+import RFE_pyconfig
 
 #
 # Parse textual output and make a plot
@@ -75,10 +76,9 @@ if "--ugly" in sys.argv[1:]:
 size = (a_arr[0] + s_arr[0]).sum()
 
 import os
-usetex = os.getenv("MPL_text_usetex") not in [ "false", "False", "0" ]
 plt.rcParams.update({'font.family':'serif',
                      'font.sans-serif':'Palatino',
-                     'text.usetex':usetex,
+                     'text.usetex':RFE_pyconfig.config_dict.get("usetex"),
                      'axes.prop_cycle':plt.rcParams['axes.prop_cycle'][:nbins]})
 
 plt.figure(figsize=(10,5),tight_layout=True)

@@ -44,7 +44,7 @@ do
     esac
 done            
 
-./parserun.py $@ < "$file" > $TMPFILE
+./parserun.py "$@" < "$file" > $TMPFILE
 # Don't truncate for parse_results if exec is cat
 if [ "$exec" != cat ]
 then
